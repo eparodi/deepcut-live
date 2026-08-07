@@ -8,14 +8,24 @@ import (
 	"fmt"
 
 	"github.com/deepcut/live/internal/model"
-	"github.com/deepcut/live/internal/store/postgres"
 )
 
-type UserService struct {
-	store *postgres.Store
+// UserStore is the interface for user persistence operations.
+// The postgres.Store satisfies this interface.
+type UserStore interface {
+	CreateUser(ctx context.Context, googleID, email, name, avatarURL, keyHash string) (*model.User, error)
+	GetUserByGoogleID(ctx context.Context, googleID string) (*model.User, error)
+	GetUserByID(ctx context.Context, id string) (*model.User, error)
+	GetUserByStreamKeyHash(ctx context.Context, keyHash string) (*model.User, error)
+	UpdateStreamKeyHash(ctx context.Context, userID, keyHash string) error
+	UpdateStreamSettings(ctx context.Context, userID, title, category string) error
 }
 
-func NewUserService(store *postgres.Store) *UserService {
+type UserService struct {
+	store UserStore
+}
+
+func NewUserService(store UserStore) *UserService {
 	return &UserService{store: store}
 }
 
