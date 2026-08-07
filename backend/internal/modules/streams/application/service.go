@@ -148,3 +148,24 @@ func (s *StreamService) RemoveViewer(ctx context.Context, streamID, clientID str
 	}
 	return nil
 }
+
+// GetAnalytics returns aggregated streaming analytics for the user.
+func (s *StreamService) GetAnalytics(ctx context.Context, userID, period string) (*domain.Analytics, error) {
+	return s.repo.GetAnalytics(ctx, userID, period)
+}
+
+// ForceEndStream terminates the user's current live stream.
+func (s *StreamService) ForceEndStream(ctx context.Context, userID string) error {
+	stream, err := s.repo.GetStreamByUserID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("get active stream: %w", err)
+	}
+	duration := int(time.Since(stream.StartedAt).Seconds())
+	if err := s.repo.EndStream(ctx, stream.ID, "", "", duration); err != nil {
+		return fmt.Errorf("end stream: %w", err)
+	}
+	if err := s.authRepo.SetLiveStatus(ctx, userID, false); err != nil {
+		return fmt.Errorf("set live status: %w", err)
+	}
+	return nil
+}

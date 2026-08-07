@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/deepcut/live/internal/modules/auth/application"
+	streamapp "github.com/deepcut/live/internal/modules/streams/application"
 	"github.com/deepcut/live/internal/shared/errs"
 	"github.com/deepcut/live/internal/shared/render"
 )
@@ -22,12 +23,13 @@ type ctxKey int
 const ctxKeyUserID ctxKey = iota
 
 type AuthHandler struct {
-	svc    *application.AuthService
-	logger *slog.Logger
+	svc       *application.AuthService
+	streamSvc *streamapp.StreamService
+	logger    *slog.Logger
 }
 
-func NewAuthHandler(svc *application.AuthService, logger *slog.Logger) *AuthHandler {
-	return &AuthHandler{svc: svc, logger: logger}
+func NewAuthHandler(svc *application.AuthService, streamSvc *streamapp.StreamService, logger *slog.Logger) *AuthHandler {
+	return &AuthHandler{svc: svc, streamSvc: streamSvc, logger: logger}
 }
 
 // RegisterRoutes registers all auth routes on the given router.
@@ -40,6 +42,8 @@ func (h *AuthHandler) RegisterRoutes(r chi.Router) {
 		r.Get("/api/me", h.GetMe)
 		r.Post("/api/me/stream-key/regenerate", h.RegenerateStreamKey)
 		r.Patch("/api/me/settings", h.UpdateSettings)
+		r.Get("/api/me/analytics", h.GetAnalytics)
+		r.Post("/api/me/stream/end", h.ForceEndStream)
 	})
 }
 
@@ -254,4 +258,46 @@ func (h *AuthHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	render.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// GetAnalytics returns stream analytics for the authenticated user.
+func (h *AuthHandler) GetAnalytics(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
+	userID := userIDFromCtx(r.Context())
+	if userID == "" {
+		render.Error(w, r, errs.Unauthorized("not authenticated"))
+		return
+	}
+
+	period := r.URL.Query().Get("period")
+	if period == "" {
+		period = "week"
+	}
+
+	analytics, err := h.streamSvc.GetAnalytics(r.Context(), userID, period)
+	if err != nil {
+		render.Error(w, r, fmt.Errorf("get analytics: %w", err))
+		return
+	}
+
+	render.JSON(w, http.StatusOK, analytics)
+}
+
+// ForceEndStream terminates the current live stream.
+func (h *AuthHandler) ForceEndStream(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
+	userID := userIDFromCtx(r.Context())
+	if userID == "" {
+		render.Error(w, r, errs.Unauthorized("not authenticated"))
+		return
+	}
+
+	if err := h.streamSvc.ForceEndStream(r.Context(), userID); err != nil {
+		render.Error(w, r, fmt.Errorf("force end stream: %w", err))
+		return
+	}
+
+	render.JSON(w, http.StatusOK, map[string]string{"status": "offline"})
 }

@@ -236,6 +236,26 @@ func (r *StreamRepo) GetViewerCount(ctx context.Context, streamID string) (int, 
 	return count, nil
 }
 
+func (r *StreamRepo) GetAnalytics(ctx context.Context, userID, period string) (*domain.Analytics, error) {
+	var a domain.Analytics
+	a.Period = period
+	var dateCond string
+	switch period {
+	case "week":
+		dateCond = "date >= date_trunc('week', now())::date"
+	case "month":
+		dateCond = "date >= date_trunc('month', now())::date"
+	default:
+		dateCond = "true"
+	}
+	q := fmt.Sprintf(`SELECT COALESCE(SUM(total_seconds),0), COALESCE(MAX(peak_viewers),0), COALESCE(SUM(unique_viewers),0), COUNT(*) FROM stream_analytics WHERE user_id = $1 AND %s`, dateCond)
+	err := r.pool.QueryRow(ctx, q, userID).Scan(&a.TotalSeconds, &a.PeakViewers, &a.UniqueViewers, &a.TotalStreams)
+	if err != nil {
+		return nil, fmt.Errorf("get analytics: %w", err)
+	}
+	return &a, nil
+}
+
 func (r *StreamRepo) UpdateStreamAnalytics(ctx context.Context, userID string, date string, duration, peak, unique int) error {
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO stream_analytics (user_id, date, total_seconds, peak_viewers, unique_viewers)

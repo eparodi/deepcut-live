@@ -59,7 +59,7 @@ func main() {
 	streamSvc := streamapp.NewStreamService(streamRepo, authRepo, srsSecret)
 
 	// HTTP handlers
-	authHandler := authhttp.NewAuthHandler(authSvc, logger)
+	authHandler := authhttp.NewAuthHandler(authSvc, streamSvc, logger)
 	streamHandler := streamhttp.NewStreamHandler(streamSvc, logger)
 
 	// Router
