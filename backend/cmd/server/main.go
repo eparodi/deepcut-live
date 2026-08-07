@@ -22,6 +22,10 @@ import (
 	streamhttp "github.com/deepcut/live/internal/modules/streams/adapter/http"
 	streampg "github.com/deepcut/live/internal/modules/streams/adapter/postgres"
 	streamapp "github.com/deepcut/live/internal/modules/streams/application"
+
+	chathttp "github.com/deepcut/live/internal/modules/chat/adapter/http"
+	chatpg "github.com/deepcut/live/internal/modules/chat/adapter/postgres"
+	chatapp "github.com/deepcut/live/internal/modules/chat/application"
 )
 
 func main() {
@@ -53,14 +57,18 @@ func main() {
 	// Postgres adapters
 	authRepo := authpg.NewAuthRepo(pool)
 	streamRepo := streampg.NewStreamRepo(pool)
+	chatRepo := chatpg.NewChatRepo(pool)
 
 	// Application services
 	authSvc := authapp.NewAuthService(authRepo, googleClientID, googleClientSecret, baseURL, jwtSecret)
 	streamSvc := streamapp.NewStreamService(streamRepo, authRepo, srsSecret)
+	chatHub := chatapp.NewChatHub(chatRepo, logger)
+	chatSvc := chatapp.NewChatService(chatRepo, chatHub)
 
 	// HTTP handlers
 	authHandler := authhttp.NewAuthHandler(authSvc, logger)
 	streamHandler := streamhttp.NewStreamHandler(streamSvc, logger)
+	chatHandler := chathttp.NewChatHandler(chatSvc, logger)
 
 	// Router
 	r := chi.NewRouter()
@@ -87,6 +95,7 @@ func main() {
 	// Module route registration
 	authHandler.RegisterRoutes(r)
 	streamHandler.RegisterRoutes(r)
+	chatHandler.RegisterRoutes(r)
 
 	srv := &http.Server{
 		Addr:              ":" + port,
