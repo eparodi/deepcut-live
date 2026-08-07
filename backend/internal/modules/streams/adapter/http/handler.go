@@ -26,14 +26,39 @@ func NewStreamHandler(svc *application.StreamService, logger *slog.Logger) *Stre
 
 // RegisterRoutes registers all stream routes on the given router.
 func (h *StreamHandler) RegisterRoutes(r chi.Router) {
-	// SRS callbacks — authenticated by shared secret
-	r.Post("/api/srs/on_publish", h.SRSOnPublish)
-	r.Post("/api/srs/on_unpublish", h.SRSOnUnpublish)
+	// SRS callback — authenticated by shared secret
+	r.Post("/api/srs/callback", h.SRSCallback)
 
 	// Public routes
 	r.Get("/api/streams/live", h.ListLiveStreams)
-	r.Get("/api/channels/{userID}", h.GetChannelInfo)
-	r.Post("/api/streams/{streamID}/heartbeat", h.ViewerHeartbeat)
+	r.Get("/api/channel/{userID}", h.GetChannelInfo)
+	r.Post("/api/streams/{streamID}/viewer-heartbeat", h.ViewerHeartbeat)
+}
+
+// SRSCallback handles SRS on_publish/on_unpublish by dispatching based on the action field.
+func (h *StreamHandler) SRSCallback(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
+	var body struct {
+		Action   string `json:"action"`
+		ClientID int    `json:"client_id"`
+		Stream   string `json:"stream"`
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		w.Write([]byte("1"))
+		return
+	}
+
+	switch body.Action {
+	case "on_publish":
+		h.SRSOnPublish(w, r)
+	case "on_unpublish":
+		h.SRSOnUnpublish(w, r)
+	default:
+		h.logger.Warn("unknown srs action", "action", body.Action)
+		w.Write([]byte("0"))
+	}
 }
 
 // SRSOnPublish handles the SRS on_publish callback.
