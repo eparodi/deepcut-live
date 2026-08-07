@@ -13,10 +13,15 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/deepcut/live/internal/handler"
-	"github.com/deepcut/live/internal/service"
-	"github.com/deepcut/live/internal/store/postgres"
+	authhttp "github.com/deepcut/live/internal/modules/auth/adapter/http"
+	authpg "github.com/deepcut/live/internal/modules/auth/adapter/postgres"
+	authapp "github.com/deepcut/live/internal/modules/auth/application"
+
+	streamhttp "github.com/deepcut/live/internal/modules/streams/adapter/http"
+	streampg "github.com/deepcut/live/internal/modules/streams/adapter/postgres"
+	streamapp "github.com/deepcut/live/internal/modules/streams/application"
 )
 
 func main() {
@@ -32,22 +37,35 @@ func main() {
 	srsSecret := env("SRS_CALLBACK_SECRET", "dev-srs-secret")
 
 	// Database
-	pool, err := postgres.NewPool(context.Background(), dbURL)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	poolCfg, err := pgxpool.ParseConfig(dbURL)
+	if err != nil {
+		log.Fatalf("failed to parse database URL: %v", err)
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		log.Fatalf("failed to connect to database: %v", err)
 	}
 	defer pool.Close()
 
-	store := postgres.New(pool)
+	// Postgres adapters
+	authRepo := authpg.NewAuthRepo(pool)
+	streamRepo := streampg.NewStreamRepo(pool)
 
-	// Services
-	authSvc := service.NewAuthService(googleClientID, googleClientSecret, baseURL, jwtSecret)
-	userSvc := service.NewUserService(store)
+	// Application services
+	authSvc := authapp.NewAuthService(authRepo, googleClientID, googleClientSecret, baseURL, jwtSecret)
+	streamSvc := streamapp.NewStreamService(streamRepo, authRepo, srsSecret)
+
+	// HTTP handlers
+	authHandler := authhttp.NewAuthHandler(authSvc, logger)
+	streamHandler := streamhttp.NewStreamHandler(streamSvc, logger)
 
 	// Router
 	r := chi.NewRouter()
 
-	// Middleware chain
+	// Middleware chain (order matters)
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
@@ -60,18 +78,15 @@ func main() {
 		AllowCredentials: true,
 	}))
 
-	h := handler.New(authSvc, userSvc, jwtSecret, srsSecret)
-
-	// Public routes
-	r.Get("/api/auth/google", h.GoogleOAuth)
-	r.Get("/api/auth/google/callback", h.GoogleOAuthCallback)
-
-	// Protected routes
-	r.Group(func(r chi.Router) {
-		r.Use(h.AuthMiddleware)
-		r.Get("/api/me", h.GetMe)
-		r.Post("/api/me/stream-key/regenerate", h.RegenerateStreamKey)
+	// Health check
+	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
 	})
+
+	// Module route registration
+	authHandler.RegisterRoutes(r)
+	streamHandler.RegisterRoutes(r)
 
 	srv := &http.Server{
 		Addr:              ":" + port,
@@ -94,9 +109,9 @@ func main() {
 	<-quit
 	logger.Info("shutting down...")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Fatalf("shutdown: %v", err)
 	}
 }

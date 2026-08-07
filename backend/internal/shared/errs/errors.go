@@ -31,6 +31,12 @@ func Unauthorized(msg string) *AppError {
 func NotFound(msg string, args ...any) *AppError {
 	return &AppError{Kind: KindNotFound, Message: fmt.Sprintf(msg, args...)}
 }
+func Forbidden(msg string) *AppError {
+	return &AppError{Kind: KindForbidden, Message: msg}
+}
+func Conflict(msg string, args ...any) *AppError {
+	return &AppError{Kind: KindConflict, Message: fmt.Sprintf(msg, args...)}
+}
 func Internal(msg string) *AppError {
 	return &AppError{Kind: KindInternal, Message: msg}
 }
