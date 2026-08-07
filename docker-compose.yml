@@ -1,0 +1,50 @@
+version: "3.8"
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081"
+    environment:
+      DATABASE_URL: postgres://live:live@postgres:5432/live?sslmode=disable
+      PORT: "8081"
+      JWT_SECRET: dev-secret-change-in-production
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      BASE_URL: http://localhost:3000
+      SRS_CALLBACK_SECRET: dev-srs-secret
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./data/hls:/data/hls
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: live
+      POSTGRES_PASSWORD: live
+      POSTGRES_DB: live
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U live"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+
+  srs:
+    image: ossrs/srs:5
+    ports:
+      - "1935:1935"
+      - "8080:8080"
+    volumes:
+      - ./data/srs.conf:/usr/local/srs/conf/srs.conf
+      - ./data/hls:/data/hls
+
+volumes:
+  pgdata:
