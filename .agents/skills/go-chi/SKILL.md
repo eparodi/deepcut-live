@@ -66,6 +66,38 @@ backend/
 talk to databases. A handler never opens a database connection. A service
 never parses an HTTP request body.
 
+## Authentication
+
+### DO — Use asymmetric JWT (ES256/RS256), not HMAC
+
+```go
+// Generate ECDSA key pair (do this once, store in env vars/secrets):
+// openssl ecparam -genkey -name prime256v1 -noout -out private.pem
+// openssl ec -in private.pem -pubout -out public.pem
+
+// Load in main.go:
+privKey, _ := jwt.ParseECPrivateKeyFromPEM([]byte(privateKeyPEM))
+pubKey, _ := jwt.ParseECPublicKeyFromPEM([]byte(publicKeyPEM))
+
+// Sign tokens with private key:
+token := jwt.NewWithClaims(jwt.SigningMethodES256, claims)
+signed, _ := token.SignedString(privKey)
+
+// Verify with public key:
+token, _ := jwt.Parse(tokenStr, func(t *jwt.Token) (any, error) {
+   return pubKey, nil
+})
+```
+
+### DO NOT — JWT mistakes
+
+| ❌ Wrong | ✅ Right |
+|---|---|
+| HMAC (HS256) for multi-service apps | ECDSA (ES256) or RSA (RS256) |
+| `jwtSecret` as raw string | PEM-encoded key pair, loaded from env or file |
+| `token.Claims.(jwt.MapClaims)` without type check | Always `ok` check the type assertion |
+| Hardcoded JWT secret in source | `os.Getenv("JWT_PRIVATE_KEY")` / `os.Getenv("JWT_PUBLIC_KEY")` |
+
 ## chi Router Patterns
 
 ### DO — Standard route registration
