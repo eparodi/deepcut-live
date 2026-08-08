@@ -2,6 +2,7 @@ package http
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,17 +14,27 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"github.com/deepcut/live/internal/modules/streams/application"
+	"github.com/deepcut/live/internal/modules/streams/domain"
 	"github.com/deepcut/live/internal/shared/errs"
 	"github.com/deepcut/live/internal/shared/render"
 )
 
+// streamService is the subset of *application.StreamService methods that StreamHandler needs.
+type streamService interface {
+	VerifySRSSecret(secret string) error
+	OnStreamStart(ctx context.Context, rawKey string, srsClientID int, title string) (*domain.Stream, error)
+	OnStreamEnd(ctx context.Context, srsClientID int, hlsPath, recordingPath string, durationSeconds int) error
+	ListLive(ctx context.Context) ([]domain.LiveStream, error)
+	GetChannelInfo(ctx context.Context, userID string) (*domain.ChannelInfo, error)
+	HeartbeatViewer(ctx context.Context, streamID, userID, clientID string) error
+}
+
 type StreamHandler struct {
-	svc    *application.StreamService
+	svc    streamService
 	logger *slog.Logger
 }
 
-func NewStreamHandler(svc *application.StreamService, logger *slog.Logger) *StreamHandler {
+func NewStreamHandler(svc streamService, logger *slog.Logger) *StreamHandler {
 	return &StreamHandler{svc: svc, logger: logger}
 }
 
