@@ -11,9 +11,11 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"golang.org/x/oauth2"
 
 	"github.com/deepcut/live/internal/modules/auth/application"
-	streamapp "github.com/deepcut/live/internal/modules/streams/application"
+	"github.com/deepcut/live/internal/modules/auth/domain"
+	streamsdomain "github.com/deepcut/live/internal/modules/streams/domain"
 	"github.com/deepcut/live/internal/shared/errs"
 	"github.com/deepcut/live/internal/shared/render"
 )
@@ -22,14 +24,34 @@ type ctxKey int
 
 const ctxKeyUserID ctxKey = iota
 
+// authService is the subset of *application.AuthService methods that AuthHandler needs.
+type authService interface {
+	GenerateOAuthURL(state string) string
+	ExchangeCodeForToken(ctx context.Context, code string) (*oauth2.Token, error)
+	GetGoogleUser(ctx context.Context, token *oauth2.Token) (*application.GoogleUserInfo, error)
+	GetByGoogleID(ctx context.Context, googleID string) (*domain.User, error)
+	CreateUser(ctx context.Context, googleID, email, name, avatarURL string) (*domain.User, error)
+	GenerateJWT(userID string) (string, error)
+	ValidateJWT(tokenStr string) (string, error)
+	GetByID(ctx context.Context, id string) (*domain.User, error)
+	RegenerateStreamKey(ctx context.Context, userID string) (string, error)
+	UpdateSettings(ctx context.Context, userID, title, category string) error
+}
+
+// streamOps is the subset of stream service methods that AuthHandler needs.
+type streamOps interface {
+	GetAnalytics(ctx context.Context, userID, period string) (*streamsdomain.Analytics, error)
+	ForceEndStream(ctx context.Context, userID string) error
+}
+
 type AuthHandler struct {
-	svc       *application.AuthService
-	streamSvc *streamapp.StreamService
+	svc       authService
+	streamSvc streamOps
 	baseURL   string
 	logger    *slog.Logger
 }
 
-func NewAuthHandler(svc *application.AuthService, streamSvc *streamapp.StreamService, baseURL string, logger *slog.Logger) *AuthHandler {
+func NewAuthHandler(svc authService, streamSvc streamOps, baseURL string, logger *slog.Logger) *AuthHandler {
 	return &AuthHandler{svc: svc, streamSvc: streamSvc, baseURL: baseURL, logger: logger}
 }
 

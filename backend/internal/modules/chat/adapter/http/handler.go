@@ -19,13 +19,20 @@ import (
 	"github.com/deepcut/live/internal/shared/render"
 )
 
+// chatService is the subset of *application.ChatService methods that ChatHandler needs.
+type chatService interface {
+	GetHub() *application.ChatHub
+	SendMessage(ctx context.Context, streamID, userID, userName, message string) (*domain.ChatMessage, error)
+	GetMessages(ctx context.Context, streamID string, limit, offset int) ([]domain.ChatMessage, error)
+}
+
 type ChatHandler struct {
-	svc    *application.ChatService
+	svc    chatService
 	hub    *application.ChatHub
 	logger *slog.Logger
 }
 
-func NewChatHandler(svc *application.ChatService, logger *slog.Logger) *ChatHandler {
+func NewChatHandler(svc chatService, logger *slog.Logger) *ChatHandler {
 	return &ChatHandler{
 		svc:    svc,
 		hub:    svc.GetHub(),

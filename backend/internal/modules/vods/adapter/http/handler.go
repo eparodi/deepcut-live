@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -9,18 +10,25 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/deepcut/live/internal/modules/vods/application"
 	"github.com/deepcut/live/internal/modules/vods/domain"
 	"github.com/deepcut/live/internal/shared/errs"
 	"github.com/deepcut/live/internal/shared/render"
 )
 
+// vodService is the subset of *application.VODService methods that VODHandler needs.
+type vodService interface {
+	GetVOD(ctx context.Context, vodID string) (*domain.VOD, error)
+	ListVODs(ctx context.Context, userID string, limit, offset int) ([]domain.VOD, error)
+	SearchVODs(ctx context.Context, params domain.SearchParams) (*domain.SearchResult, error)
+	RecordViewerHeartbeat(ctx context.Context, vodID string) error
+}
+
 type VODHandler struct {
-	svc    *application.VODService
+	svc    vodService
 	logger *slog.Logger
 }
 
-func NewVODHandler(svc *application.VODService, logger *slog.Logger) *VODHandler {
+func NewVODHandler(svc vodService, logger *slog.Logger) *VODHandler {
 	return &VODHandler{svc: svc, logger: logger}
 }
 
