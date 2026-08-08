@@ -30,7 +30,7 @@ migrate-up:
 	migrate -path $(MIGRATIONS_DIR) -database "$(DATABASE_URL)" up
 
 # ── sqlc Generate + Diff Check ────────────────────────────────────────
-# Pinned to match CI version (see .github/workflows/backend-ci.yml)
+# Pinned to v1.31.1 (see .github/workflows/backend-ci.yml for version)
 sqlc-check:
 	sqlc generate -f db/sqlc.yaml
 	@if [ -n "$$(git status --porcelain)" ]; then \
