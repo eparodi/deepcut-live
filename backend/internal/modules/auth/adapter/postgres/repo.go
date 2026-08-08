@@ -169,5 +169,8 @@ func (r *AuthRepo) GetLiveUsers(ctx context.Context) ([]domain.User, error) {
 		}
 		users = append(users, u)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows iteration: %w", err)
+	}
 	return users, nil
 }
