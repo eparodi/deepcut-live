@@ -1,0 +1,154 @@
+name: Backend CI
+
+on:
+  pull_request:
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-ci.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-ci.yml"
+
+defaults:
+  run:
+    working-directory: backend
+
+env:
+  GO_VERSION: "1.22"
+  PG_USER: live
+  PG_PASSWORD: live
+  PG_DB: live
+  DATABASE_URL: "postgres://live:live@localhost:5432/live?sslmode=disable"
+
+jobs:
+  # ── Lint ────────────────────────────────────────────────────────────
+  lint:
+    name: Lint (go vet)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: go vet
+        run: go vet ./...
+
+  # ── Build ───────────────────────────────────────────────────────────
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: go build
+        run: go build ./...
+
+  # ── Unit Tests ──────────────────────────────────────────────────────
+  unit-test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: go test (unit)
+        run: go test -short -count=1 ./...
+
+  # ── Integration Tests ───────────────────────────────────────────────
+  integration-test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ${{ env.PG_USER }}
+          POSTGRES_PASSWORD: ${{ env.PG_PASSWORD }}
+          POSTGRES_DB: ${{ env.PG_DB }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: install golang-migrate
+        run: |
+          curl -L https://github.com/golang-migrate/migrate/releases/download/v4.17.1/migrate.linux-amd64.tar.gz | tar xvz
+          sudo mv migrate /usr/local/bin/migrate
+      - name: run migrations
+        run: migrate -path db/migrations -database "$DATABASE_URL" up
+      - name: go test (integration)
+        run: go test -run Integration -count=1 ./...
+
+  # ── Migration Check ─────────────────────────────────────────────────
+  migration-check:
+    name: Migration Check
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ${{ env.PG_USER }}
+          POSTGRES_PASSWORD: ${{ env.PG_PASSWORD }}
+          POSTGRES_DB: ${{ env.PG_DB }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: install golang-migrate
+        run: |
+          curl -L https://github.com/golang-migrate/migrate/releases/download/v4.17.1/migrate.linux-amd64.tar.gz | tar xvz
+          sudo mv migrate /usr/local/bin/migrate
+      - name: migrate up (first pass)
+        run: migrate -path db/migrations -database "$DATABASE_URL" up
+      - name: migrate up (idempotency check)
+        run: migrate -path db/migrations -database "$DATABASE_URL" up
+      - name: check for down migrations
+        run: |
+          DOWN_COUNT=$(ls db/migrations/*.down.sql 2>/dev/null | wc -l)
+          if [ "$DOWN_COUNT" -gt 0 ]; then
+            echo "Found ${DOWN_COUNT} down migration(s). Running down then up to verify reversibility."
+            migrate -path db/migrations -database "$DATABASE_URL" down -all
+            migrate -path db/migrations -database "$DATABASE_URL" up
+          else
+            echo "No down migrations found — skipping reversibility check."
+          fi
+
+  # ── sqlc Check ──────────────────────────────────────────────────────
+  sqlc-check:
+    name: sqlc Generate (no diff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: install sqlc
+        run: go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+      - name: sqlc generate
+        run: sqlc generate -f db/sqlc.yaml
+      - name: check no diff
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "sqlc generated code is out of date. Run 'make sqlc-check' locally and commit the changes."
+            git diff
+            exit 1
+          fi
+          echo "sqlc generated code is up to date."
