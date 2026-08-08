@@ -32,6 +32,10 @@ import (
 	vodhttp "github.com/deepcut/live/internal/modules/vods/adapter/http"
 	vodpg "github.com/deepcut/live/internal/modules/vods/adapter/postgres"
 	vodapp "github.com/deepcut/live/internal/modules/vods/application"
+
+	chathttp "github.com/deepcut/live/internal/modules/chat/adapter/http"
+	chatpg "github.com/deepcut/live/internal/modules/chat/adapter/postgres"
+	chatapp "github.com/deepcut/live/internal/modules/chat/application"
 )
 
 func main() {
@@ -63,14 +67,18 @@ func main() {
 	authRepo := authpg.NewAuthRepo(pool)
 	streamRepo := streampg.NewStreamRepo(pool)
 	vodRepo := vodpg.NewVODRepo(pool)
+	chatRepo := chatpg.NewChatRepo(pool)
 
 	authSvc := authapp.NewAuthService(authRepo, googleClientID, googleClientSecret, baseURL, privateKeyPEM, publicKeyPEM)
 	streamSvc := streamapp.NewStreamService(streamRepo, authRepo, srsSecret)
 	vodSvc := vodapp.NewVODService(vodRepo)
+	chatHub := chatapp.NewChatHub(chatRepo, logger)
+	chatSvc := chatapp.NewChatService(chatRepo, chatHub)
 
 	authHandler := authhttp.NewAuthHandler(authSvc, streamSvc, baseURL, logger)
 	streamHandler := streamhttp.NewStreamHandler(streamSvc, logger)
 	vodHandler := vodhttp.NewVODHandler(vodSvc, logger)
+	chatHandler := chathttp.NewChatHandler(chatSvc, logger)
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -93,6 +101,7 @@ func main() {
 	authHandler.RegisterRoutes(r)
 	streamHandler.RegisterRoutes(r)
 	vodHandler.RegisterRoutes(r)
+	chatHandler.RegisterRoutes(r)
 
 	srv := &http.Server{
 		Addr:              ":" + port,
