@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/deepcut/live/internal/modules/streams/domain"
@@ -93,7 +94,9 @@ func (s *StreamService) OnStreamEnd(ctx context.Context, srsClientID int, hlsPat
 	if unique == 0 {
 		unique = 1
 	}
-	_ = s.repo.UpdateStreamAnalytics(ctx, stream.UserID, date, durationSeconds, peak, unique)
+	if err := s.repo.UpdateStreamAnalytics(ctx, stream.UserID, date, durationSeconds, peak, unique); err != nil {
+		slog.Error("failed to update stream analytics", "err", err, "stream_id", stream.ID)
+	}
 
 	return nil
 }
