@@ -77,7 +77,9 @@ rule. Below is the complete trace.
 | Skills rules added | 13 |
 | New skills created | 1 |
 | Skill rules strengthened | 2 |
-| Merged PRs | 5 of 6 |
+| Merged PRs | 6 of 6 |
+
+**Correction (2026-08-08):** PR #3 (US4 chat) was initially skipped because the Round 1 review agent checked the wrong branch (`feat/us2-going-live` instead of `feat/us4-real-time-chat`). The PR was properly reviewed in Round 3 by checking the correct branch. Chat code exists (359 lines, 5 files) and has been merged into main. Lesson: always verify the branch name matches the PR before reviewing. Added to reviewer skill as a pre-review checklist item.
 
 ## What worked well
 
