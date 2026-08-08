@@ -95,7 +95,7 @@ func (s *StreamService) OnStreamEnd(ctx context.Context, srsClientID int, hlsPat
 		unique = 1
 	}
 	if err := s.repo.UpdateStreamAnalytics(ctx, stream.UserID, date, durationSeconds, peak, unique); err != nil {
-		slog.Error("failed to update stream analytics", "err", err, "stream_id", stream.ID)
+		slog.Error("update stream analytics failed", "error", err, "user_id", stream.UserID)
 	}
 
 	return nil

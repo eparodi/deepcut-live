@@ -145,7 +145,7 @@ func (r *StreamRepo) ListLiveStreams(ctx context.Context) ([]domain.LiveStream, 
 		result = append(result, ls)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate streams: %w", err)
+		return nil, fmt.Errorf("rows iteration: %w", err)
 	}
 	return result, nil
 }

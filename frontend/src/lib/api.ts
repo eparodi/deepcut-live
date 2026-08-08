@@ -79,6 +79,12 @@ import type {
   Analytics,
   StreamEndResponse,
   LiveStream,
+  LiveStreamsResponse,
+  ChannelResponse,
+  ChatMessagesResponse,
+  VodsResponse,
+  VodDetail,
+  SearchResponse,
 } from "@/types";
 
 /** GET /api/me — get current user profile + stream key */
@@ -118,6 +124,59 @@ export function forceEndStream(): Promise<StreamEndResponse> {
 }
 
 /** GET /api/streams/live — get list of live streams */
-export function getLiveStreams(): Promise<LiveStream[]> {
-  return api<LiveStream[]>("/api/streams/live");
+export function getLiveStreams(): Promise<LiveStreamsResponse> {
+  return api<LiveStreamsResponse>("/api/streams/live");
+}
+
+/** GET /api/channel/:userId — channel info + live status + HLS URL */
+export function getChannel(userId: string): Promise<ChannelResponse> {
+  return api<ChannelResponse>(`/api/channel/${userId}`);
+}
+
+/** GET /api/chat/:streamId/messages — chat history (for VOD replay) */
+export function getChatMessages(
+  streamId: string,
+  before?: string,
+  limit = 100
+): Promise<ChatMessagesResponse> {
+  const params = new URLSearchParams();
+  if (before) params.set("before", before);
+  params.set("limit", String(limit));
+  return api<ChatMessagesResponse>(
+    `/api/chat/${streamId}/messages?${params.toString()}`
+  );
+}
+
+/** GET /api/channel/:userId/vods — VOD list */
+export function getChannelVods(
+  userId: string,
+  page = 1,
+  limit = 20
+): Promise<VodsResponse> {
+  const params = new URLSearchParams({
+    page: String(page),
+    limit: String(limit),
+  });
+  return api<VodsResponse>(
+    `/api/channel/${userId}/vods?${params.toString()}`
+  );
+}
+
+/** GET /api/vods/:vodId — VOD detail */
+export function getVodDetail(vodId: string): Promise<VodDetail> {
+  return api<VodDetail>(`/api/vods/${vodId}`);
+}
+
+/** GET /api/search — search VODs */
+export function searchVods(
+  query: string,
+  page = 1,
+  limit = 20
+): Promise<SearchResponse> {
+  const params = new URLSearchParams({
+    q: query,
+    page: String(page),
+    limit: String(limit),
+  });
+  return api<SearchResponse>(`/api/search?${params.toString()}`);
 }
