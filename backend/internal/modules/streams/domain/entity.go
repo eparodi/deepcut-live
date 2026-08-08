@@ -24,24 +24,24 @@ type Stream struct {
 type LiveStream struct {
 	StreamID    string  `json:"streamId"`
 	UserID      string  `json:"userId"`
-	UserName    string  `json:"userName"`
-	UserAvatar  *string `json:"userAvatar"`
+	UserName    string  `json:"streamerName"`
+	UserAvatar  *string `json:"streamerAvatarUrl"`
 	Title       *string `json:"title"`
 	Category    *string `json:"category"`
 	StartedAt   string  `json:"startedAt"`
-	HlsPath     *string `json:"hlsPath"`
+	HlsPath     *string `json:"thumbnailUrl"`
 	ViewerCount int     `json:"viewerCount"`
 }
 
 // ChannelInfo provides public-facing channel/profile information.
 type ChannelInfo struct {
 	UserID         string  `json:"userId"`
-	UserName       string  `json:"userName"`
-	UserAvatar     *string `json:"userAvatar"`
+	UserName       string  `json:"streamerName"`
+	UserAvatar     *string `json:"streamerAvatarUrl"`
 	StreamTitle    *string `json:"streamTitle"`
 	StreamCategory *string `json:"streamCategory"`
 	IsLive         bool    `json:"isLive"`
 	StartedAt      *string `json:"startedAt,omitempty"`
-	HlsPath        *string `json:"hlsPath,omitempty"`
+	HlsPath        *string `json:"thumbnailUrl,omitempty"`
 	ViewerCount    int     `json:"viewerCount"`
 }
