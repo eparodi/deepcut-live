@@ -114,7 +114,7 @@ func (m *mockAuthService) UpdateSettings(ctx context.Context, userID, title, cat
 
 type mockStreamOps struct {
 	getAnalyticsFn   func(ctx context.Context, userID, period string) (*streamsdomain.Analytics, error)
-	forceEndStreamFn func(ctx context.Context, userID string) error
+	forceEndStreamFn func(ctx context.Context, userID string) (string, error)
 }
 
 func (m *mockStreamOps) GetAnalytics(ctx context.Context, userID, period string) (*streamsdomain.Analytics, error) {
@@ -124,11 +124,11 @@ func (m *mockStreamOps) GetAnalytics(ctx context.Context, userID, period string)
 	return &streamsdomain.Analytics{Period: period}, nil
 }
 
-func (m *mockStreamOps) ForceEndStream(ctx context.Context, userID string) error {
+func (m *mockStreamOps) ForceEndStream(ctx context.Context, userID string) (string, error) {
 	if m.forceEndStreamFn != nil {
 		return m.forceEndStreamFn(ctx, userID)
 	}
-	return nil
+	return "Stream ended", nil
 }
 
 // ---------------------------------------------------------------------------
@@ -603,8 +603,8 @@ func TestForceEndStream(t *testing.T) {
 			name:   "service error",
 			userID: "user-1",
 			setupMock: func(m *mockStreamOps) {
-				m.forceEndStreamFn = func(ctx context.Context, userID string) error {
-					return errs.Internal("end failed")
+				m.forceEndStreamFn = func(ctx context.Context, userID string) (string, error) {
+					return "", errs.Internal("end failed")
 				}
 			},
 			wantCode: http.StatusInternalServerError,
@@ -713,4 +713,197 @@ func TestAuthMiddleware(t *testing.T) {
 // Ensure unused imports are fine — time is used in domain.User.CreatedAt tests
 func testLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
+// ---------------------------------------------------------------------------
+// TestGetMe_EdgeCases — Task 12: null fields, user not found
+
+// ---------------------------------------------------------------------------
+// TestGetMe_EdgeCases — additional coverage beyond TestGetMe
+// ---------------------------------------------------------------------------
+
+func TestGetMe_EdgeCases(t *testing.T) {
+	name := "Test Streamer"
+	avatar := "https://example.com/avatar.png"
+
+	tests := []struct {
+		name      string
+		setupMock func(*mockAuthService)
+		wantCode  int
+	}{
+		{
+			name: "not found — user deleted",
+			setupMock: func(m *mockAuthService) {
+				m.getByIDFn = func(ctx context.Context, id string) (*domain.User, error) {
+					return nil, errs.NotFound("user %s not found", id)
+				}
+			},
+			wantCode: http.StatusNotFound,
+		},
+		{
+			name: "null fields — optional fields are nil",
+			setupMock: func(m *mockAuthService) {
+				m.getByIDFn = func(ctx context.Context, id string) (*domain.User, error) {
+					return &domain.User{
+						ID:    "user-1",
+						Email: "test@example.com",
+						Name:  name,
+						// AvatarURL, StreamTitle, StreamCategory left nil
+					}, nil
+				}
+			},
+			wantCode: http.StatusOK,
+		},
+	}
+
+	_ = name
+	_ = avatar
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			authMock := &mockAuthService{}
+			streamMock := &mockStreamOps{}
+			if tt.setupMock != nil {
+				tt.setupMock(authMock)
+			}
+			h := NewAuthHandler(authMock, streamMock, "", testLogger())
+
+			req := httptest.NewRequest(http.MethodGet, "/api/me", nil)
+			ctx := withUserID(context.Background(), "user-1")
+			req = req.WithContext(ctx)
+			rec := httptest.NewRecorder()
+			h.GetMe(rec, req)
+
+			if rec.Code != tt.wantCode {
+				t.Errorf("got %d, want %d", rec.Code, tt.wantCode)
+			}
+		})
+	}
+}
+
+// TestGetAnalytics_EdgeCases validates period enum and defaults.
+func TestGetAnalytics_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		period   string
+		wantCode int
+	}{
+		{
+			name:     "invalid period returns 400",
+			period:   "day",
+			wantCode: http.StatusBadRequest,
+		},
+		{
+			name:     "all period returns 200",
+			period:   "all",
+			wantCode: http.StatusOK,
+		},
+		{
+			name:     "no period param defaults to week",
+			period:   "",
+			wantCode: http.StatusOK,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			authMock := &mockAuthService{}
+			streamMock := &mockStreamOps{}
+			h := NewAuthHandler(authMock, streamMock, "", testLogger())
+
+			u := "/api/me/analytics"
+			if tt.period != "" {
+				u += "?period=" + tt.period
+			}
+			req := httptest.NewRequest(http.MethodGet, u, nil)
+			ctx := withUserID(context.Background(), "user-1")
+			req = req.WithContext(ctx)
+			rec := httptest.NewRecorder()
+			h.GetAnalytics(rec, req)
+
+			if rec.Code != tt.wantCode {
+				t.Errorf("got %d, want %d", rec.Code, tt.wantCode)
+			}
+		})
+	}
+}
+
+// TestUpdateSettings_Validation validates input constraints (Task 16).
+func TestUpdateSettings_Validation(t *testing.T) {
+	tests := []struct {
+		name     string
+		body     string
+		wantCode int
+	}{
+		{
+			name:     "missing title returns 400",
+			body:     `{"streamCategory":"Gaming"}`,
+			wantCode: http.StatusBadRequest,
+		},
+		{
+			name:     "empty title returns 400",
+			body:     `{"streamTitle":""}`,
+			wantCode: http.StatusBadRequest,
+		},
+		{
+			name:     "whitespace-only title returns 400",
+			body:     `{"streamTitle":"   "}`,
+			wantCode: http.StatusBadRequest,
+		},
+		{
+			name:     "title over 100 chars returns 400",
+			body:     `{"streamTitle":"` + strings.Repeat("x", 101) + `"}`,
+			wantCode: http.StatusBadRequest,
+		},
+		{
+			name:     "category over 100 chars returns 400",
+			body:     `{"streamTitle":"OK","streamCategory":"` + strings.Repeat("x", 101) + `"}`,
+			wantCode: http.StatusBadRequest,
+		},
+		{
+			name:     "only title (no category) returns 200",
+			body:     `{"streamTitle":"Just Chatting"}`,
+			wantCode: http.StatusOK,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			authMock := &mockAuthService{}
+			streamMock := &mockStreamOps{}
+			h := NewAuthHandler(authMock, streamMock, "", testLogger())
+
+			req := httptest.NewRequest(http.MethodPatch, "/api/me/settings",
+				strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+			ctx := withUserID(context.Background(), "user-1")
+			req = req.WithContext(ctx)
+			rec := httptest.NewRecorder()
+			h.UpdateSettings(rec, req)
+
+			if rec.Code != tt.wantCode {
+				t.Errorf("got %d, want %d", rec.Code, tt.wantCode)
+			}
+		})
+	}
+}
+
+// TestForceEndStream_Conflict validates 409 on no active stream (Task 17).
+func TestForceEndStream_Conflict(t *testing.T) {
+	streamMock := &mockStreamOps{
+		forceEndStreamFn: func(ctx context.Context, userID string) (string, error) {
+			return "", errs.Conflict("no active stream to end")
+		},
+	}
+	h := NewAuthHandler(&mockAuthService{}, streamMock, "", testLogger())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/me/stream/end", nil)
+	ctx := withUserID(context.Background(), "user-1")
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+	h.ForceEndStream(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Errorf("got %d, want %d (409 Conflict)", rec.Code, http.StatusConflict)
+	}
 }

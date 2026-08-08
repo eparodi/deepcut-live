@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -473,4 +474,58 @@ func TestViewerHeartbeat(t *testing.T) {
 
 func testLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
+// ---------------------------------------------------------------------------
+// TestListLiveStreams_Shape — Task 13: verify wrapper shape {streams, total}
+// ---------------------------------------------------------------------------
+
+func TestListLiveStreams_Shape(t *testing.T) {
+	tests := []struct {
+		name      string
+		setupMock func(*mockStreamService)
+	}{
+		{
+			name: "empty list returns correct wrapper",
+		},
+		{
+			name: "non-empty list returns streams and total",
+			setupMock: func(m *mockStreamService) {
+				m.listLiveFn = func(ctx context.Context) ([]domain.LiveStream, error) {
+					return []domain.LiveStream{
+						{StreamID: "stream-1", UserID: "user-1", UserName: "Tester", ViewerCount: 5, StartedAt: "2026-01-01T00:00:00Z"},
+					}, nil
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &mockStreamService{}
+			if tt.setupMock != nil {
+				tt.setupMock(svc)
+			}
+			h := NewStreamHandler(svc, testLogger())
+
+			req := httptest.NewRequest(http.MethodGet, "/api/streams/live", nil)
+			rec := httptest.NewRecorder()
+			h.ListLiveStreams(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("got %d, want 200", rec.Code)
+			}
+
+			var body struct {
+				Streams []any `json:"streams"`
+				Total   int   `json:"total"`
+			}
+			if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+				t.Fatalf("decode JSON: %v", err)
+			}
+			if len(body.Streams) != body.Total {
+				t.Errorf("total %d != len(streams) %d", body.Total, len(body.Streams))
+			}
+		})
+	}
 }

@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/deepcut/live/internal/modules/streams/domain"
@@ -16,13 +18,19 @@ type StreamService struct {
 	repo      domain.StreamRepository
 	authRepo  domain.AuthRepo
 	srsSecret string
+	srsAPIURL string
+	http      *http.Client
 }
 
-func NewStreamService(repo domain.StreamRepository, authRepo domain.AuthRepo, srsSecret string) *StreamService {
+func NewStreamService(repo domain.StreamRepository, authRepo domain.AuthRepo, srsSecret, srsAPIURL string) *StreamService {
 	return &StreamService{
 		repo:      repo,
 		authRepo:  authRepo,
 		srsSecret: srsSecret,
+		srsAPIURL: srsAPIURL,
+		http: &http.Client{
+			Timeout: 5 * time.Second,
+		},
 	}
 }
 
@@ -154,21 +162,79 @@ func (s *StreamService) RemoveViewer(ctx context.Context, streamID, clientID str
 
 // GetAnalytics returns aggregated streaming analytics for the user.
 func (s *StreamService) GetAnalytics(ctx context.Context, userID, period string) (*domain.Analytics, error) {
+	if period == "" {
+		period = "week"
+	}
 	return s.repo.GetAnalytics(ctx, userID, period)
 }
 
 // ForceEndStream terminates the user's current live stream.
-func (s *StreamService) ForceEndStream(ctx context.Context, userID string) error {
+// Returns a user-facing message on success; on error the caller should render an error response.
+func (s *StreamService) ForceEndStream(ctx context.Context, userID string) (string, error) {
 	stream, err := s.repo.GetStreamByUserID(ctx, userID)
 	if err != nil {
-		return fmt.Errorf("get active stream: %w", err)
+		// Convert NotFound to Conflict — the user exists but has no active stream.
+		var appErr *errs.AppError
+		if errors.As(err, &appErr) && appErr.Kind == errs.KindNotFound {
+			return "", errs.Conflict("no active stream to end")
+		}
+		return "", fmt.Errorf("get active stream: %w", err)
 	}
+
+	// Try to disconnect the publisher via SRS (graceful degradation).
+	srsFailed := false
+	if stream.SRSClientID != nil && s.srsAPIURL != "" {
+		if err := s.disconnectSRSClient(ctx, *stream.SRSClientID); err != nil {
+			slog.Warn("failed to disconnect SRS publisher", "err", err, "user_id", userID, "srs_client_id", *stream.SRSClientID)
+			srsFailed = true
+		}
+	}
+
 	duration := int(time.Since(stream.StartedAt).Seconds())
 	if err := s.repo.EndStream(ctx, stream.ID, "", "", duration); err != nil {
-		return fmt.Errorf("end stream: %w", err)
+		return "", fmt.Errorf("end stream: %w", err)
 	}
+
 	if err := s.authRepo.SetLiveStatus(ctx, userID, false); err != nil {
-		return fmt.Errorf("set live status: %w", err)
+		return "", fmt.Errorf("set live status: %w", err)
+	}
+
+	// Update analytics (same pattern as OnStreamEnd).
+	date := time.Now().Format("2006-01-02")
+	peak := stream.PeakViewers
+	unique := stream.TotalViewers
+	if peak == 0 {
+		peak = 1
+	}
+	if unique == 0 {
+		unique = 1
+	}
+	if err := s.repo.UpdateStreamAnalytics(ctx, userID, date, duration, peak, unique); err != nil {
+		slog.Error("failed to update stream analytics", "err", err, "user_id", userID)
+	}
+
+	if srsFailed {
+		return "Stream ended (publisher disconnect may have failed)", nil
+	}
+	return "Stream ended", nil
+}
+
+// disconnectSRSClient sends a DELETE to SRS to drop the publisher connection.
+func (s *StreamService) disconnectSRSClient(ctx context.Context, clientID int) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete,
+		fmt.Sprintf("%s/api/v1/clients/%d", s.srsAPIURL, clientID), nil)
+	if err != nil {
+		return fmt.Errorf("build srs request: %w", err)
+	}
+
+	resp, err := s.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("srs call: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("srs responded with %d", resp.StatusCode)
 	}
 	return nil
 }

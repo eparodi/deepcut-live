@@ -34,6 +34,7 @@ type AuthService struct {
 	publicKey   *ecdsa.PublicKey
 	baseURL     string
 	googleCfg   oauth2.Config
+	userInfoURL string
 }
 
 func NewAuthService(repo domain.Repository, googleClientID, googleClientSecret, baseURL, privateKeyPEM, publicKeyPEM string) *AuthService {
@@ -46,10 +47,11 @@ func NewAuthService(repo domain.Repository, googleClientID, googleClientSecret, 
 		panic(fmt.Sprintf("failed to parse public key: %v", err))
 	}
 	return &AuthService{
-		repo:       repo,
-		privateKey: priv,
-		publicKey:  pub,
-		baseURL:    baseURL,
+		repo:        repo,
+		privateKey:  priv,
+		publicKey:   pub,
+		baseURL:     baseURL,
+		userInfoURL: "https://www.googleapis.com/oauth2/v2/userinfo",
 		googleCfg: oauth2.Config{
 			ClientID:     googleClientID,
 			ClientSecret: googleClientSecret,
@@ -80,7 +82,7 @@ func (s *AuthService) ExchangeCodeForToken(ctx context.Context, code string) (*o
 // GetGoogleUser fetches the authenticated user's profile from Google.
 func (s *AuthService) GetGoogleUser(ctx context.Context, token *oauth2.Token) (*GoogleUserInfo, error) {
 	client := s.googleCfg.Client(ctx, token)
-	resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
+	resp, err := client.Get(s.userInfoURL)
 	if err != nil {
 		return nil, fmt.Errorf("fetch google userinfo: %w", err)
 	}

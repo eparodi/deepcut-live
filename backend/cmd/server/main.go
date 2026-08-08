@@ -47,6 +47,7 @@ func main() {
 	googleClientSecret := env("GOOGLE_CLIENT_SECRET", "")
 	baseURL := env("BASE_URL", "http://localhost:3000")
 	srsSecret := env("SRS_CALLBACK_SECRET", "dev-srs-secret")
+	srsAPIURL := env("SRS_API_URL", "http://srs:1985")
 
 	// Load or generate ECDSA key pair for JWT
 	privateKeyPEM, publicKeyPEM := loadOrGenerateKeys()
@@ -70,7 +71,7 @@ func main() {
 	chatRepo := chatpg.NewChatRepo(pool)
 
 	authSvc := authapp.NewAuthService(authRepo, googleClientID, googleClientSecret, baseURL, privateKeyPEM, publicKeyPEM)
-	streamSvc := streamapp.NewStreamService(streamRepo, authRepo, srsSecret)
+	streamSvc := streamapp.NewStreamService(streamRepo, authRepo, srsSecret, srsAPIURL)
 	vodSvc := vodapp.NewVODService(vodRepo)
 	chatHub := chatapp.NewChatHub(chatRepo, logger)
 	chatSvc := chatapp.NewChatService(chatRepo, chatHub)

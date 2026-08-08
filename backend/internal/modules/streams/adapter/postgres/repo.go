@@ -111,7 +111,7 @@ func (r *StreamRepo) GetStreamBySRSClientID(ctx context.Context, srsClientID int
 func (r *StreamRepo) ListLiveStreams(ctx context.Context) ([]domain.LiveStream, error) {
 	query := `
 		SELECT s.id, u.id, u.name, u.avatar_url, s.title,
-		       COALESCE(u.stream_category, ''),
+		       u.stream_category,
 		       s.started_at, s.hls_path,
 		       COALESCE(vc.viewer_count, 0)
 		FROM streams s
@@ -119,6 +119,7 @@ func (r *StreamRepo) ListLiveStreams(ctx context.Context) ([]domain.LiveStream, 
 		LEFT JOIN (
 			SELECT stream_id, COUNT(*) as viewer_count
 			FROM stream_viewers
+			WHERE last_seen >= now() - interval '60 seconds'
 			GROUP BY stream_id
 		) vc ON vc.stream_id = s.id
 		WHERE s.status = 'live'
@@ -193,7 +194,7 @@ func (r *StreamRepo) GetChannelInfo(ctx context.Context, userID string) (*domain
 func (r *StreamRepo) UpsertViewer(ctx context.Context, streamID, userID, clientID string) error {
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO stream_viewers (stream_id, user_id, client_id)
-		VALUES ($1, NULLIF($2, ''), $3)
+		VALUES ($1, NULLIF($2, '')::uuid, $3)
 		ON CONFLICT (stream_id, client_id) DO UPDATE SET last_seen = now()`,
 		streamID, userID, clientID,
 	)
@@ -242,20 +243,46 @@ func (r *StreamRepo) GetViewerCount(ctx context.Context, streamID string) (int, 
 func (r *StreamRepo) GetAnalytics(ctx context.Context, userID, period string) (*domain.Analytics, error) {
 	var a domain.Analytics
 	a.Period = period
-	var dateCond string
+
 	switch period {
 	case "week":
-		dateCond = "date >= date_trunc('week', now())::date"
+		err := r.pool.QueryRow(ctx, `
+			SELECT COALESCE(SUM(total_seconds),0), COALESCE(MAX(peak_viewers),0),
+			       COALESCE(SUM(unique_viewers),0), COUNT(*),
+			       date_trunc('week', now())::date::text,
+			       (date_trunc('week', now())::date + 6)::text
+			FROM stream_analytics WHERE user_id = $1 AND date >= date_trunc('week', now())::date`,
+			userID,
+		).Scan(&a.TotalSeconds, &a.PeakViewers, &a.UniqueViewers, &a.TotalStreams, &a.StartDate, &a.EndDate)
+		if err != nil {
+			return nil, fmt.Errorf("get analytics (week): %w", err)
+		}
 	case "month":
-		dateCond = "date >= date_trunc('month', now())::date"
-	default:
-		dateCond = "true"
+		err := r.pool.QueryRow(ctx, `
+			SELECT COALESCE(SUM(total_seconds),0), COALESCE(MAX(peak_viewers),0),
+			       COALESCE(SUM(unique_viewers),0), COUNT(*),
+			       date_trunc('month', now())::date::text,
+			       (date_trunc('month', now())::date + interval '1 month' - interval '1 day')::text
+			FROM stream_analytics WHERE user_id = $1 AND date >= date_trunc('month', now())::date`,
+			userID,
+		).Scan(&a.TotalSeconds, &a.PeakViewers, &a.UniqueViewers, &a.TotalStreams, &a.StartDate, &a.EndDate)
+		if err != nil {
+			return nil, fmt.Errorf("get analytics (month): %w", err)
+		}
+	default: // "all"
+		err := r.pool.QueryRow(ctx, `
+			SELECT COALESCE(SUM(total_seconds),0), COALESCE(MAX(peak_viewers),0),
+			       COALESCE(SUM(unique_viewers),0), COUNT(*),
+			       COALESCE(MIN(date), CURRENT_DATE)::text,
+			       CURRENT_DATE::text
+			FROM stream_analytics WHERE user_id = $1`,
+			userID,
+		).Scan(&a.TotalSeconds, &a.PeakViewers, &a.UniqueViewers, &a.TotalStreams, &a.StartDate, &a.EndDate)
+		if err != nil {
+			return nil, fmt.Errorf("get analytics (all): %w", err)
+		}
 	}
-	q := fmt.Sprintf(`SELECT COALESCE(SUM(total_seconds),0), COALESCE(MAX(peak_viewers),0), COALESCE(SUM(unique_viewers),0), COUNT(*) FROM stream_analytics WHERE user_id = $1 AND %s`, dateCond)
-	err := r.pool.QueryRow(ctx, q, userID).Scan(&a.TotalSeconds, &a.PeakViewers, &a.UniqueViewers, &a.TotalStreams)
-	if err != nil {
-		return nil, fmt.Errorf("get analytics: %w", err)
-	}
+
 	return &a, nil
 }
 
