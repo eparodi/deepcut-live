@@ -67,7 +67,7 @@ func (s *UserService) RegenerateStreamKey(ctx context.Context, userID string) (s
 	}
 	keyHash := HashStreamKey(key)
 	if err := s.store.UpdateStreamKeyHash(ctx, userID, keyHash); err != nil {
-		return "", fmt.Errorf("update key hash: %w", err)
+		return "", fmt.Errorf("update stream key: %w", err)
 	}
 	return key, nil
 }
