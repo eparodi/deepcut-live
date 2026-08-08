@@ -17,7 +17,6 @@ defaults:
     working-directory: backend
 
 env:
-  GO_VERSION: "1.22"
   PG_USER: live
   PG_PASSWORD: live
   PG_DB: live
@@ -32,7 +31,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: backend/go.mod
       - name: go vet
         run: go vet ./...
 
@@ -44,7 +43,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: backend/go.mod
       - name: go build
         run: go build ./...
 
@@ -56,7 +55,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: backend/go.mod
       - name: go test (unit)
         run: go test -short -count=1 ./...
 
@@ -82,11 +81,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: backend/go.mod
       - name: install golang-migrate
-        run: |
-          curl -L https://github.com/golang-migrate/migrate/releases/download/v4.17.1/migrate.linux-amd64.tar.gz | tar xvz
-          sudo mv migrate /usr/local/bin/migrate
+        run: go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.17.1
       - name: run migrations
         run: migrate -path db/migrations -database "$DATABASE_URL" up
       - name: go test (integration)
@@ -112,10 +109,11 @@ jobs:
           --health-retries 5
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
       - name: install golang-migrate
-        run: |
-          curl -L https://github.com/golang-migrate/migrate/releases/download/v4.17.1/migrate.linux-amd64.tar.gz | tar xvz
-          sudo mv migrate /usr/local/bin/migrate
+        run: go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.17.1
       - name: migrate up (first pass)
         run: migrate -path db/migrations -database "$DATABASE_URL" up
       - name: migrate up (idempotency check)
@@ -139,9 +137,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: backend/go.mod
       - name: install sqlc
-        run: go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+        run: go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.27.0
       - name: sqlc generate
         run: sqlc generate -f db/sqlc.yaml
       - name: check no diff

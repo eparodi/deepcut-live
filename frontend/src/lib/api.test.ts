@@ -5,6 +5,9 @@ import { ApiError, api } from "./api";
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
+// api.ts uses NEXT_PUBLIC_API_URL env var with this fallback
+const BASE_URL = "http://localhost:3000";
+
 describe("ApiError", () => {
   it("extracts error message from JSON body", () => {
     const err = new ApiError(404, { error: "User not found" });
@@ -40,7 +43,7 @@ describe("api", () => {
     const result = await api("/api/me");
 
     expect(mockFetch).toHaveBeenCalledWith(
-      "http://localhost:3000/api/me",
+      `${BASE_URL}/api/me`,
       expect.objectContaining({
         credentials: "include",
       })
@@ -73,7 +76,7 @@ describe("api", () => {
   });
 
   it("returns undefined for 204 No Content", async () => {
-    mockFetch.mockResolvedValue(new Response(null, { status: 204 }));
+    mockFetch.mockResolvedValueOnce(new Response(null, { status: 204 }));
 
     const result = await api("/api/me/stream/end", { method: "POST" });
 
@@ -81,7 +84,7 @@ describe("api", () => {
   });
 
   it("throws ApiError on non-2xx response with JSON body", async () => {
-    mockFetch.mockResolvedValue(
+    mockFetch.mockResolvedValueOnce(
       new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 })
     );
 
@@ -92,7 +95,7 @@ describe("api", () => {
   });
 
   it("throws ApiError on non-2xx response with non-JSON body", async () => {
-    mockFetch.mockResolvedValue(
+    mockFetch.mockResolvedValueOnce(
       new Response("plain text error", { status: 500 })
     );
 

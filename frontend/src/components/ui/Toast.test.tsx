@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, act } from "@testing-library/react";
+import { render, screen, act, renderHook } from "@testing-library/react";
 import { Toast, useToast } from "./Toast";
 
 describe("Toast", () => {
@@ -106,22 +106,6 @@ describe("Toast", () => {
 
 // ── useToast hook ──────────────────────────────────────────────────────
 
-/** Test component that exercises the useToast hook */
-function ToastConsumer({
-  triggerRef,
-}: {
-  triggerRef: {
-    current: null | ((msg: string, variant: "success" | "error") => void);
-  };
-}) {
-  const { showToast, ToastComponent } = useToast();
-
-  // Expose showToast to the test via ref
-  triggerRef.current = showToast;
-
-  return <div>{ToastComponent}</div>;
-}
-
 describe("useToast", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -131,51 +115,74 @@ describe("useToast", () => {
     vi.useRealTimers();
   });
 
+  it("starts with no toast", () => {
+    const { result } = renderHook(() => useToast());
+
+    expect(result.current.ToastComponent).toBeNull();
+  });
+
   it("shows a success toast and dismisses after timeout", () => {
-    const triggerRef: { current: null | ((msg: string, variant: "success" | "error") => void) } = { current: null };
-    render(<ToastConsumer triggerRef={triggerRef} />);
+    const { result, rerender } = renderHook(() => useToast());
 
-    // Trigger the toast
     act(() => {
-      triggerRef.current?.("Done!", "success");
+      result.current.showToast("Done!", "success");
     });
+    rerender();
 
-    expect(screen.getByText("Done!")).toBeInTheDocument();
+    // ToastComponent is a React element, render it to query
+    const { container: c1 } = render(result.current.ToastComponent);
+    expect(c1).toHaveTextContent("Done!");
 
     // Advance past the auto-dismiss timeout
     act(() => {
       vi.advanceTimersByTime(3000);
     });
+    rerender();
 
-    expect(screen.queryByText("Done!")).not.toBeInTheDocument();
+    expect(result.current.ToastComponent).toBeNull();
   });
 
   it("shows an error toast", () => {
-    const triggerRef: { current: null | ((msg: string, variant: "success" | "error") => void) } = { current: null };
-    render(<ToastConsumer triggerRef={triggerRef} />);
+    const { result, rerender } = renderHook(() => useToast());
 
     act(() => {
-      triggerRef.current?.("Oops!", "error");
+      result.current.showToast("Oops!", "error");
     });
+    rerender();
 
-    expect(screen.getByText("Oops!")).toBeInTheDocument();
+    const { container } = render(result.current.ToastComponent);
+    expect(container).toHaveTextContent("Oops!");
   });
 
   it("only shows one toast at a time", () => {
-    const triggerRef: { current: null | ((msg: string, variant: "success" | "error") => void) } = { current: null };
-    render(<ToastConsumer triggerRef={triggerRef} />);
+    const { result, rerender } = renderHook(() => useToast());
 
     act(() => {
-      triggerRef.current?.("First", "success");
+      result.current.showToast("First", "success");
     });
-    expect(screen.getByText("First")).toBeInTheDocument();
+    rerender();
 
     act(() => {
-      triggerRef.current?.("Second", "error");
+      result.current.showToast("Second", "error");
     });
+    rerender();
 
     // Second toast replaces first
-    expect(screen.queryByText("First")).not.toBeInTheDocument();
-    expect(screen.getByText("Second")).toBeInTheDocument();
+    const { container } = render(result.current.ToastComponent);
+    expect(container).toHaveTextContent("Second");
+    expect(container).not.toHaveTextContent("First");
+  });
+
+  it("showToast defaults variant to success", () => {
+    const { result, rerender } = renderHook(() => useToast());
+
+    act(() => {
+      result.current.showToast("Default variant");
+    });
+    rerender();
+
+    const { container } = render(result.current.ToastComponent);
+    const el = container.firstElementChild as HTMLElement;
+    expect(el.style.backgroundColor).toBe("var(--color-primary)");
   });
 });
