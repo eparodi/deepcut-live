@@ -198,7 +198,7 @@ func (s *AuthService) RegenerateStreamKey(ctx context.Context, userID string) (s
 		return "", fmt.Errorf("generate stream key: %w", err)
 	}
 	if err := s.repo.UpdateStreamKey(ctx, userID, hash); err != nil {
-		return "", err
+		return "", fmt.Errorf("update stream key: %w", err)
 	}
 	return raw, nil
 }
