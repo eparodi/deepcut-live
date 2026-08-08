@@ -22,6 +22,10 @@ import (
 	streamhttp "github.com/deepcut/live/internal/modules/streams/adapter/http"
 	streampg "github.com/deepcut/live/internal/modules/streams/adapter/postgres"
 	streamapp "github.com/deepcut/live/internal/modules/streams/application"
+
+	vodhttp "github.com/deepcut/live/internal/modules/vods/adapter/http"
+	vodpg "github.com/deepcut/live/internal/modules/vods/adapter/postgres"
+	vodapp "github.com/deepcut/live/internal/modules/vods/application"
 )
 
 func main() {
@@ -53,14 +57,17 @@ func main() {
 	// Postgres adapters
 	authRepo := authpg.NewAuthRepo(pool)
 	streamRepo := streampg.NewStreamRepo(pool)
+	vodRepo := vodpg.NewVODRepo(pool)
 
 	// Application services
 	authSvc := authapp.NewAuthService(authRepo, googleClientID, googleClientSecret, baseURL, jwtSecret)
 	streamSvc := streamapp.NewStreamService(streamRepo, authRepo, srsSecret)
+	vodSvc := vodapp.NewVODService(vodRepo)
 
 	// HTTP handlers
 	authHandler := authhttp.NewAuthHandler(authSvc, logger)
 	streamHandler := streamhttp.NewStreamHandler(streamSvc, logger)
+	vodHandler := vodhttp.NewVODHandler(vodSvc, logger)
 
 	// Router
 	r := chi.NewRouter()
@@ -87,6 +94,7 @@ func main() {
 	// Module route registration
 	authHandler.RegisterRoutes(r)
 	streamHandler.RegisterRoutes(r)
+	vodHandler.RegisterRoutes(r)
 
 	srv := &http.Server{
 		Addr:              ":" + port,
