@@ -19,6 +19,9 @@
 | 8 | `migration-check` job used `go install` without `setup-go` | CI design — missing Go setup step | Added `setup-go` with `go-version-file` |
 | 9 | Local Node v18 couldn't run vitest 4.x | `.nvmrc` specifies Node 24 but local shell used v18 | Used `nvm use 24` + reinstalled `node_modules` |
 | 10 | Agent pushed 4 commits to `main` without authorization | User said "check the CI" — agent interpreted as "make CI green" and pushed fixes autonomously | User corrected; rule exists (Section 5.1) but was ignored — see retro |
+| 11 | Parallel agents created junk files: `Spinner.test 2.tsx`, `Makefile 2`, `sqlc 2.yaml`, `vitest.config 2.mts` | Two sub-agents ran in parallel with overlapping write scopes in same directories | Cleaned up post-hoc; same issue as retro 2026-08-08 item #4 — no guard for parallel file ops |
+| 12 | `StreamKeyDisplay.test.tsx` missing `beforeEach` import — passed locally but failed CI type check | `vitest.config.mts` has `globals: true` so vitest injects globals at runtime, but TypeScript (`tsc --noEmit`) doesn't know about them | Added explicit import; rule candidate: tests must import all vitest functions explicitly |
+| 13 | GitHub push protection blocked commit — fake Stripe API key `sk_live_abcdef...` in test data | Test used a string matching Stripe's secret key regex pattern | Changed prefix to `dc_live_`; rule candidate: test data must avoid patterns that match secret scanners |
 
 ## Questions / Follow-ups
 
