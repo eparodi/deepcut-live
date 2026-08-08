@@ -45,3 +45,12 @@ type ChannelInfo struct {
 	HlsPath        *string `json:"thumbnailUrl,omitempty"`
 	ViewerCount    int     `json:"viewerCount"`
 }
+
+// Analytics holds aggregated streaming statistics.
+type Analytics struct {
+	Period        string `json:"period"`
+	TotalSeconds  int    `json:"totalStreamTimeSeconds"`
+	PeakViewers   int    `json:"peakViewers"`
+	UniqueViewers int    `json:"totalUniqueViewers"`
+	TotalStreams  int    `json:"totalStreams"`
+}

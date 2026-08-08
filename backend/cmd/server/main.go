@@ -2,6 +2,12 @@ package main
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/pem"
+	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
@@ -31,48 +37,42 @@ import (
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
-	// Config
-	dbURL := env("DATABASE_URL", "postgres://live:live@localhost:5432/live?sslmode=disable")
 	port := env("PORT", "8081")
-	jwtSecret := env("JWT_SECRET", "dev-secret-change-in-production")
+	dbURL := env("DATABASE_URL", "postgres://live:live@localhost:5432/live?sslmode=disable")
 	googleClientID := env("GOOGLE_CLIENT_ID", "")
 	googleClientSecret := env("GOOGLE_CLIENT_SECRET", "")
 	baseURL := env("BASE_URL", "http://localhost:3000")
 	srsSecret := env("SRS_CALLBACK_SECRET", "dev-srs-secret")
 
-	// Database
+	// Load or generate ECDSA key pair for JWT
+	privateKeyPEM, publicKeyPEM := loadOrGenerateKeys()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	poolCfg, err := pgxpool.ParseConfig(dbURL)
 	if err != nil {
-		log.Fatalf("failed to parse database URL: %v", err)
+		log.Fatalf("parse db url: %v", err)
 	}
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
-		log.Fatalf("failed to connect to database: %v", err)
+		log.Fatalf("connect db: %v", err)
 	}
 	defer pool.Close()
 
-	// Postgres adapters
 	authRepo := authpg.NewAuthRepo(pool)
 	streamRepo := streampg.NewStreamRepo(pool)
 	vodRepo := vodpg.NewVODRepo(pool)
 
-	// Application services
-	authSvc := authapp.NewAuthService(authRepo, googleClientID, googleClientSecret, baseURL, jwtSecret)
+	authSvc := authapp.NewAuthService(authRepo, googleClientID, googleClientSecret, baseURL, privateKeyPEM, publicKeyPEM)
 	streamSvc := streamapp.NewStreamService(streamRepo, authRepo, srsSecret)
 	vodSvc := vodapp.NewVODService(vodRepo)
 
-	// HTTP handlers
-	authHandler := authhttp.NewAuthHandler(authSvc, logger)
+	authHandler := authhttp.NewAuthHandler(authSvc, streamSvc, baseURL, logger)
 	streamHandler := streamhttp.NewStreamHandler(streamSvc, logger)
 	vodHandler := vodhttp.NewVODHandler(vodSvc, logger)
 
-	// Router
 	r := chi.NewRouter()
-
-	// Middleware chain (order matters)
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
@@ -85,13 +85,11 @@ func main() {
 		AllowCredentials: true,
 	}))
 
-	// Health check
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok"))
 	})
 
-	// Module route registration
 	authHandler.RegisterRoutes(r)
 	streamHandler.RegisterRoutes(r)
 	vodHandler.RegisterRoutes(r)
@@ -122,6 +120,34 @@ func main() {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Fatalf("shutdown: %v", err)
 	}
+}
+
+func loadOrGenerateKeys() (privatePEM, publicPEM string) {
+	privEnv := os.Getenv("JWT_PRIVATE_KEY")
+	pubEnv := os.Getenv("JWT_PUBLIC_KEY")
+	if privEnv != "" && pubEnv != "" {
+		return privEnv, pubEnv
+	}
+
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		log.Fatalf("generate ecdsa key: %v", err)
+	}
+
+	privBytes, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		log.Fatalf("marshal private key: %v", err)
+	}
+	privPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: privBytes})
+
+	pubBytes, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	if err != nil {
+		log.Fatalf("marshal public key: %v", err)
+	}
+	pubPEM := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pubBytes})
+
+	fmt.Fprintf(os.Stderr, "Generated new ECDSA P-256 key pair. Set JWT_PRIVATE_KEY and JWT_PUBLIC_KEY env vars for persistence.\n")
+	return string(privPEM), string(pubPEM)
 }
 
 func env(key, fallback string) string {

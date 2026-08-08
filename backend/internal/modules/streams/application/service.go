@@ -95,7 +95,7 @@ func (s *StreamService) OnStreamEnd(ctx context.Context, srsClientID int, hlsPat
 		unique = 1
 	}
 	if err := s.repo.UpdateStreamAnalytics(ctx, stream.UserID, date, durationSeconds, peak, unique); err != nil {
-		slog.Error("update stream analytics failed", "error", err, "user_id", stream.UserID)
+		slog.Error("failed to update stream analytics", "err", err, "stream_id", stream.ID)
 	}
 
 	return nil
@@ -148,6 +148,27 @@ func (s *StreamService) HeartbeatViewer(ctx context.Context, streamID, userID, c
 func (s *StreamService) RemoveViewer(ctx context.Context, streamID, clientID string) error {
 	if err := s.repo.RemoveViewer(ctx, streamID, clientID); err != nil {
 		return fmt.Errorf("remove viewer: %w", err)
+	}
+	return nil
+}
+
+// GetAnalytics returns aggregated streaming analytics for the user.
+func (s *StreamService) GetAnalytics(ctx context.Context, userID, period string) (*domain.Analytics, error) {
+	return s.repo.GetAnalytics(ctx, userID, period)
+}
+
+// ForceEndStream terminates the user's current live stream.
+func (s *StreamService) ForceEndStream(ctx context.Context, userID string) error {
+	stream, err := s.repo.GetStreamByUserID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("get active stream: %w", err)
+	}
+	duration := int(time.Since(stream.StartedAt).Seconds())
+	if err := s.repo.EndStream(ctx, stream.ID, "", "", duration); err != nil {
+		return fmt.Errorf("end stream: %w", err)
+	}
+	if err := s.authRepo.SetLiveStatus(ctx, userID, false); err != nil {
+		return fmt.Errorf("set live status: %w", err)
 	}
 	return nil
 }

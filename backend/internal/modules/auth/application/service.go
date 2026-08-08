@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -29,16 +30,26 @@ type GoogleUserInfo struct {
 type AuthService struct {
 	repo        domain.Repository
 	oauthConfig *oauth2.Config
-	jwtSecret   []byte
+	privateKey  *ecdsa.PrivateKey
+	publicKey   *ecdsa.PublicKey
 	baseURL     string
 	googleCfg   oauth2.Config
 }
 
-func NewAuthService(repo domain.Repository, googleClientID, googleClientSecret, baseURL, jwtSecret string) *AuthService {
+func NewAuthService(repo domain.Repository, googleClientID, googleClientSecret, baseURL, privateKeyPEM, publicKeyPEM string) *AuthService {
+	priv, err := jwt.ParseECPrivateKeyFromPEM([]byte(privateKeyPEM))
+	if err != nil {
+		panic(fmt.Sprintf("failed to parse private key: %v", err))
+	}
+	pub, err := jwt.ParseECPublicKeyFromPEM([]byte(publicKeyPEM))
+	if err != nil {
+		panic(fmt.Sprintf("failed to parse public key: %v", err))
+	}
 	return &AuthService{
-		repo:      repo,
-		jwtSecret: []byte(jwtSecret),
-		baseURL:   baseURL,
+		repo:       repo,
+		privateKey: priv,
+		publicKey:  pub,
+		baseURL:    baseURL,
 		googleCfg: oauth2.Config{
 			ClientID:     googleClientID,
 			ClientSecret: googleClientSecret,
@@ -91,15 +102,15 @@ func (s *AuthService) GetGoogleUser(ctx context.Context, token *oauth2.Token) (*
 	return &user, nil
 }
 
-// GenerateJWT creates a signed JWT for the given user ID.
+// GenerateJWT creates a signed JWT for the given user ID using ES256.
 func (s *AuthService) GenerateJWT(userID string) (string, error) {
 	claims := jwt.RegisteredClaims{
 		Subject:   userID,
 		ExpiresAt: jwt.NewNumericDate(time.Now().Add(72 * time.Hour)),
 		IssuedAt:  jwt.NewNumericDate(time.Now()),
 	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signed, err := token.SignedString(s.jwtSecret)
+	token := jwt.NewWithClaims(jwt.SigningMethodES256, claims)
+	signed, err := token.SignedString(s.privateKey)
 	if err != nil {
 		return "", fmt.Errorf("sign jwt: %w", err)
 	}
@@ -109,10 +120,10 @@ func (s *AuthService) GenerateJWT(userID string) (string, error) {
 // ValidateJWT parses and validates a JWT, returning the user ID.
 func (s *AuthService) ValidateJWT(tokenStr string) (string, error) {
 	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (any, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+		if _, ok := t.Method.(*jwt.SigningMethodECDSA); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
-		return s.jwtSecret, nil
+		return s.publicKey, nil
 	})
 	if err != nil {
 		return "", fmt.Errorf("parse jwt: %w", err)

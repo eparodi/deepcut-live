@@ -20,6 +20,8 @@ type StreamRepository interface {
 	RemoveViewer(ctx context.Context, streamID, clientID string) error
 	GetViewerCount(ctx context.Context, streamID string) (int, error)
 
+	GetAnalytics(ctx context.Context, userID, period string) (*Analytics, error)
+
 	UpdateStreamAnalytics(ctx context.Context, userID string, date string, duration, peak, unique int) error
 }
 

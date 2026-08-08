@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/deepcut/live/internal/modules/auth/application"
+	streamapp "github.com/deepcut/live/internal/modules/streams/application"
 	"github.com/deepcut/live/internal/shared/errs"
 	"github.com/deepcut/live/internal/shared/render"
 )
@@ -22,12 +23,14 @@ type ctxKey int
 const ctxKeyUserID ctxKey = iota
 
 type AuthHandler struct {
-	svc    *application.AuthService
-	logger *slog.Logger
+	svc       *application.AuthService
+	streamSvc *streamapp.StreamService
+	baseURL   string
+	logger    *slog.Logger
 }
 
-func NewAuthHandler(svc *application.AuthService, logger *slog.Logger) *AuthHandler {
-	return &AuthHandler{svc: svc, logger: logger}
+func NewAuthHandler(svc *application.AuthService, streamSvc *streamapp.StreamService, baseURL string, logger *slog.Logger) *AuthHandler {
+	return &AuthHandler{svc: svc, streamSvc: streamSvc, baseURL: baseURL, logger: logger}
 }
 
 // RegisterRoutes registers all auth routes on the given router.
@@ -40,18 +43,36 @@ func (h *AuthHandler) RegisterRoutes(r chi.Router) {
 		r.Get("/api/me", h.GetMe)
 		r.Post("/api/me/stream-key/regenerate", h.RegenerateStreamKey)
 		r.Patch("/api/me/settings", h.UpdateSettings)
+		r.Get("/api/me/analytics", h.GetAnalytics)
+		r.Post("/api/me/stream/end", h.ForceEndStream)
 	})
 }
 
-// AuthMiddleware extracts and validates the JWT from the Authorization header.
+// AuthMiddleware extracts and validates the JWT from the Authorization header
+// or the "token" cookie (set during OAuth callback).
 func (h *AuthHandler) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var tokenStr string
+
+		// 1. Check Authorization header (preferred)
 		header := r.Header.Get("Authorization")
-		if header == "" || !strings.HasPrefix(header, "Bearer ") {
-			render.Error(w, r, errs.Unauthorized("missing authorization header"))
+		if header != "" && strings.HasPrefix(header, "Bearer ") {
+			tokenStr = strings.TrimPrefix(header, "Bearer ")
+		}
+
+		// 2. Fall back to token cookie (set during OAuth redirect)
+		if tokenStr == "" {
+			cookie, err := r.Cookie("token")
+			if err == nil {
+				tokenStr = cookie.Value
+			}
+		}
+
+		if tokenStr == "" {
+			render.Error(w, r, errs.Unauthorized("missing authentication"))
 			return
 		}
-		tokenStr := strings.TrimPrefix(header, "Bearer ")
+
 		userID, err := h.svc.ValidateJWT(tokenStr)
 		if err != nil {
 			render.Error(w, r, errs.Unauthorized("invalid token"))
@@ -142,7 +163,19 @@ func (h *AuthHandler) GoogleOAuthCallback(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	render.JSON(w, http.StatusOK, map[string]string{"token": jwt})
+	// Set JWT as httpOnly cookie so the frontend middleware can read it
+	http.SetCookie(w, &http.Cookie{
+		Name:     "token",
+		Value:    jwt,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   r.TLS != nil,
+		MaxAge:   259200, // 72 hours
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	// Redirect back to the frontend (Next.js, same origin)
+	http.Redirect(w, r, h.baseURL+"/dashboard", http.StatusTemporaryRedirect)
 }
 
 type getMeResponse struct {
@@ -188,6 +221,8 @@ type regenerateStreamKeyRequest struct {
 }
 
 // RegenerateStreamKey generates a new stream key for the authenticated user.
+// The confirmation dialog is handled client-side; the backend always regenerates
+// when called (the user already clicked "Regenerate" in the UI dialog).
 func (h *AuthHandler) RegenerateStreamKey(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
@@ -197,17 +232,21 @@ func (h *AuthHandler) RegenerateStreamKey(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	var req regenerateStreamKeyRequest
-	r.Body = http.MaxBytesReader(w, r.Body, 4096)
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&req); err != nil {
-		render.Error(w, r, errs.BadRequest("invalid JSON: %v", err))
-		return
-	}
-	if !req.Confirm {
-		render.Error(w, r, errs.BadRequest("must confirm stream key regeneration"))
-		return
+	// Check confirmation if body is provided, but skip for empty POST bodies
+	// (the frontend dialog already serves as the confirmation step).
+	if r.ContentLength > 0 {
+		var req regenerateStreamKeyRequest
+		r.Body = http.MaxBytesReader(w, r.Body, 4096)
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&req); err != nil {
+			render.Error(w, r, errs.BadRequest("invalid JSON: %v", err))
+			return
+		}
+		if !req.Confirm {
+			render.Error(w, r, errs.BadRequest("must confirm stream key regeneration"))
+			return
+		}
 	}
 
 	rawKey, err := h.svc.RegenerateStreamKey(r.Context(), userID)
@@ -220,8 +259,8 @@ func (h *AuthHandler) RegenerateStreamKey(w http.ResponseWriter, r *http.Request
 }
 
 type updateSettingsRequest struct {
-	Title    *string `json:"title"`
-	Category *string `json:"category"`
+	Title    *string `json:"streamTitle"`
+	Category *string `json:"streamCategory"`
 }
 
 // UpdateSettings updates the authenticated user's stream settings.
@@ -258,4 +297,42 @@ func (h *AuthHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	render.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// GetAnalytics returns stream analytics for the authenticated user.
+func (h *AuthHandler) GetAnalytics(w http.ResponseWriter, r *http.Request) {
+	userID := userIDFromCtx(r.Context())
+	if userID == "" {
+		render.Error(w, r, errs.Unauthorized("not authenticated"))
+		return
+	}
+
+	period := r.URL.Query().Get("period")
+	if period == "" {
+		period = "week"
+	}
+
+	analytics, err := h.streamSvc.GetAnalytics(r.Context(), userID, period)
+	if err != nil {
+		render.Error(w, r, fmt.Errorf("get analytics: %w", err))
+		return
+	}
+
+	render.JSON(w, http.StatusOK, analytics)
+}
+
+// ForceEndStream terminates the current live stream.
+func (h *AuthHandler) ForceEndStream(w http.ResponseWriter, r *http.Request) {
+	userID := userIDFromCtx(r.Context())
+	if userID == "" {
+		render.Error(w, r, errs.Unauthorized("not authenticated"))
+		return
+	}
+
+	if err := h.streamSvc.ForceEndStream(r.Context(), userID); err != nil {
+		render.Error(w, r, fmt.Errorf("force end stream: %w", err))
+		return
+	}
+
+	render.JSON(w, http.StatusOK, map[string]string{"status": "offline"})
 }
