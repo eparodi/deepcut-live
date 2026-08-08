@@ -41,3 +41,11 @@ func (s *VODService) SearchVODs(ctx context.Context, params domain.SearchParams)
 	}
 	return result, nil
 }
+
+// RecordViewerHeartbeat increments the view count for a VOD.
+func (s *VODService) RecordViewerHeartbeat(ctx context.Context, vodID string) error {
+	if err := s.repo.IncrementViewCount(ctx, vodID); err != nil {
+		return fmt.Errorf("record viewer heartbeat: %w", err)
+	}
+	return nil
+}

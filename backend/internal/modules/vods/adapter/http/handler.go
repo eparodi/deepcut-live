@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -123,11 +122,11 @@ func (h *VODHandler) ViewerHeartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// For VODs, heartbeat is recorded as a viewer increment (simplified).
-	// In production this would track per-VOD viewership.
-	_ = vodID
-	_ = req.ClientID
-	_ = time.Now()
+	if err := h.svc.RecordViewerHeartbeat(r.Context(), vodID); err != nil {
+		h.logger.Error("viewer heartbeat failed", "error", err, "vod_id", vodID)
+		render.Error(w, r, fmt.Errorf("heartbeat: %w", err))
+		return
+	}
 
 	render.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
