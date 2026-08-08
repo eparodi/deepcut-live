@@ -237,7 +237,9 @@ func (h *AuthHandler) RegenerateStreamKey(w http.ResponseWriter, r *http.Request
 	if r.ContentLength > 0 {
 		var req regenerateStreamKeyRequest
 		r.Body = http.MaxBytesReader(w, r.Body, 4096)
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&req); err != nil {
 			render.Error(w, r, errs.BadRequest("invalid JSON: %v", err))
 			return
 		}
@@ -273,7 +275,9 @@ func (h *AuthHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 
 	var req updateSettingsRequest
 	r.Body = http.MaxBytesReader(w, r.Body, 4096)
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
 		render.Error(w, r, errs.BadRequest("invalid JSON: %v", err))
 		return
 	}
@@ -297,8 +301,6 @@ func (h *AuthHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 
 // GetAnalytics returns stream analytics for the authenticated user.
 func (h *AuthHandler) GetAnalytics(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
-
 	userID := userIDFromCtx(r.Context())
 	if userID == "" {
 		render.Error(w, r, errs.Unauthorized("not authenticated"))
@@ -321,8 +323,6 @@ func (h *AuthHandler) GetAnalytics(w http.ResponseWriter, r *http.Request) {
 
 // ForceEndStream terminates the current live stream.
 func (h *AuthHandler) ForceEndStream(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
-
 	userID := userIDFromCtx(r.Context())
 	if userID == "" {
 		render.Error(w, r, errs.Unauthorized("not authenticated"))
