@@ -64,6 +64,7 @@ export function ChatPanel({
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const rateLimitTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const connectRef = useRef<() => void>(() => {});
 
   const apiBaseUrl = API_HOST;
   const signInUrl = `${apiBaseUrl}/api/auth/google`;
@@ -152,7 +153,7 @@ export function ChatPanel({
         const delay = backoffDelay(attempt);
         reconnectTimerRef.current = setTimeout(() => {
           reconnectAttemptRef.current = attempt + 1;
-          connect();
+          connectRef.current();
         }, delay);
       } else {
         setConnectionState("disconnected");
@@ -163,6 +164,11 @@ export function ChatPanel({
       // onclose will fire after this, handling reconnect
     };
   }, [streamId, isVodReplay]);
+
+  // Keep connectRef in sync so reconnect logic always calls latest connect
+  useEffect(() => {
+    connectRef.current = connect;
+  });
 
   useEffect(() => {
     if (!isVodReplay) {

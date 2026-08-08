@@ -98,6 +98,7 @@ export function VideoPlayer({ hlsUrl, isLive, vodId }: VideoPlayerProps) {
   }, [hlsUrl, isLive, destroyHls]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- init-on-mount is the intended pattern
     initPlayer();
     return () => {
       destroyHls();
@@ -134,7 +135,6 @@ export function VideoPlayer({ hlsUrl, isLive, vodId }: VideoPlayerProps) {
   return (
     <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-black">
       {/* Video element — always rendered */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
       <video
         ref={videoRef}
         className="w-full h-full"

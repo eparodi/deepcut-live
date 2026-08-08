@@ -39,7 +39,8 @@ function DashboardContent() {
       .finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => {
+  	useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount is the intended pattern
     fetchData();
   }, [fetchData]);
 
