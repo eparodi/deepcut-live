@@ -29,9 +29,9 @@
 
 ## To retro at end
 
-- [ ] Trace each correction to a specific missing rule
-- [ ] Update AGENTS.md if any guardrail was missing (CI version pinning?)
-- [ ] Update go-chi or nextjs skills with CI-specific pre-deploy items
+- [x] Trace each correction to a specific missing rule
+- [x] Update AGENTS.md if any guardrail was missing (CI version pinning?)
+- [x] Update go-chi or nextjs skills with CI-specific pre-deploy items
 
 ---
 
@@ -40,4 +40,5 @@
 | # | What happened | Root cause | Fix / Rule change |
 |---|--------------|------------|-------------------|
 | 11 | Architect inspected existing handler code and found 10 issues across all 6 endpoints — response shapes diverged from frontend types, wrong HTTP status codes, missing input validation, missing SRS integration | No rule requiring cross-referencing `frontend/src/types/index.ts` before writing handler responses; no rule for semantically correct HTTP status codes (409 vs 404) | **go-chi skill updated:** (a) New section "DO — Match response shapes to frontend contract" with 5-point pre-implementation checklist; (b) Added `errs.Conflict`/`errs.NotFound` semantic rules to error anti-patterns table; (c) Added 3 items to pre-deploy checklist (frontend type verification, status code semantics, handler-level input validation). **backend-engineer skill updated:** (d) Contract-First Rule now requires `grep` of frontend types before implementation; (e) New "stub implementations are NOT stable" rule; (f) Expanded "If Something Seems Off" with 5 common anti-patterns to flag (wrong wrapper shape, wrong status codes, missing validation, extra/missing response fields) |
-| 12 | Backend Engineer reported `testutil/db.go` breakage blocking full test suite | testcontainers requires Docker — the Backend Engineer's environment didn't have Docker available. | No code fix needed. Verified: full `go test ./...` passes with Docker available (all 16 packages green). Session log updated to note this was a false alarm. |
+| 12 | Backend Engineer reported `testutil/db.go` breakage blocking full test suite | testcontainers requires Docker — the Backend Engineer's environment didn't have Docker available. | No code fix needed. Verified: full `go test ./...` passes with Docker available (all 16 packages green). |
+| 13 | Retro identified 3 generic rules missing from AGENTS.md that spanned all roles | Rules existed in `go-chi`/`backend-engineer` skills but not in the always-on AGENTS.md | **AGENTS.md updated:** Section 1.1 — added "cite the contract before writing the implementation" rule with 4-point verification checklist; Section 2.1 — added "API contract fidelity" rule; New Section 4 — Security (SQL injection prevention, hardcoded secrets). Sections renumbered 4-8 to 5-9. |
