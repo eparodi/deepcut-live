@@ -3,7 +3,9 @@
 // Points to Go/chi backend at http://localhost:8081
 // ============================================================
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081";
+// Use same-origin URL; Next.js rewrites proxy /api/* to the Go backend.
+// Absolute URL needed for SSR (server-side fetch has no base to resolve relatives).
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
 export class ApiError extends Error {
   status: number;

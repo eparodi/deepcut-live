@@ -54,6 +54,19 @@ frontend/
 └── next.config.ts
 ```
 
+### `.nvmrc` — pin Node version
+
+Always include a `.nvmrc` file in the frontend root so `nvm use` picks
+the correct Node version automatically:
+
+```
+# frontend/.nvmrc
+24
+```
+
+Match the Node version to Next.js requirements. Next.js 16 requires
+`>=20.9.0`. Use the latest active LTS (24 Krypton as of 2026-08).
+
 ## Server Components by DEFAULT
 
 ### Rule: Never add `"use client"` unless you have to

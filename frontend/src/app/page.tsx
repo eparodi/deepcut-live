@@ -2,7 +2,8 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081";
+// Server-side fetch needs absolute URL; client components use relative URLs via api.ts
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
 interface LiveStreamData {
   liveCount: number;
