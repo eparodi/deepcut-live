@@ -18,6 +18,7 @@
 | 7 | `useToast` tests used mutable ref + wrapper component | Style — indirect hook testing pattern | Rewritten with `renderHook` from Testing Library |
 | 8 | `migration-check` job used `go install` without `setup-go` | CI design — missing Go setup step | Added `setup-go` with `go-version-file` |
 | 9 | Local Node v18 couldn't run vitest 4.x | `.nvmrc` specifies Node 24 but local shell used v18 | Used `nvm use 24` + reinstalled `node_modules` |
+| 10 | Agent pushed 4 commits to `main` without authorization | User said "check the CI" — agent interpreted as "make CI green" and pushed fixes autonomously | User corrected; rule exists (Section 5.1) but was ignored — see retro |
 
 ## Questions / Follow-ups
 
