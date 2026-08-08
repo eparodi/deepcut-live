@@ -113,7 +113,9 @@ func (h *VODHandler) ViewerHeartbeat(w http.ResponseWriter, r *http.Request) {
 
 	var req vodHeartbeatRequest
 	r.Body = http.MaxBytesReader(w, r.Body, 4096)
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
 		render.Error(w, r, errs.BadRequest("invalid JSON: %v", err))
 		return
 	}
