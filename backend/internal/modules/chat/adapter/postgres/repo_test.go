@@ -54,6 +54,7 @@ func seedChatStream(t *testing.T, ctx context.Context, repo *ChatRepo, userID st
 }
 
 func TestChatRepo_SaveMessage(t *testing.T) {
+	testutil.SkipOnShort(t)
 	ctx := context.Background()
 	repo := NewChatRepo(testPool)
 	if err := testutil.TruncateAll(ctx, testPool); err != nil {
@@ -84,6 +85,7 @@ func TestChatRepo_SaveMessage(t *testing.T) {
 }
 
 func TestChatRepo_GetMessages(t *testing.T) {
+	testutil.SkipOnShort(t)
 	ctx := context.Background()
 	repo := NewChatRepo(testPool)
 	if err := testutil.TruncateAll(ctx, testPool); err != nil {

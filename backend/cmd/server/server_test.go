@@ -131,6 +131,7 @@ func setupTestServer(t *testing.T) (*httptest.Server, func()) {
 // ---------------------------------------------------------------------------
 
 func TestHealthEndpoint(t *testing.T) {
+	testutil.SkipOnShort(t)
 	srv, cleanup := setupTestServer(t)
 	t.Cleanup(cleanup)
 
@@ -185,6 +186,7 @@ func TestHealthEndpoint(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestListLiveStreams(t *testing.T) {
+	testutil.SkipOnShort(t)
 	srv, cleanup := setupTestServer(t)
 	t.Cleanup(cleanup)
 
@@ -240,6 +242,7 @@ func TestListLiveStreams(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGetChannelInfo_NotFound(t *testing.T) {
+	testutil.SkipOnShort(t)
 	srv, cleanup := setupTestServer(t)
 	t.Cleanup(cleanup)
 
@@ -289,6 +292,7 @@ func TestGetChannelInfo_NotFound(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestSearchVODs(t *testing.T) {
+	testutil.SkipOnShort(t)
 	srv, cleanup := setupTestServer(t)
 	t.Cleanup(cleanup)
 
@@ -343,6 +347,7 @@ func TestSearchVODs(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGetVOD_NotFound(t *testing.T) {
+	testutil.SkipOnShort(t)
 	srv, cleanup := setupTestServer(t)
 	t.Cleanup(cleanup)
 
@@ -391,6 +396,7 @@ func TestGetVOD_NotFound(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCORSHeaders(t *testing.T) {
+	testutil.SkipOnShort(t)
 	srv, cleanup := setupTestServer(t)
 	t.Cleanup(cleanup)
 
@@ -453,6 +459,7 @@ func TestCORSHeaders(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestAuthFlow(t *testing.T) {
+	testutil.SkipOnShort(t)
 	srv, cleanup := setupTestServer(t)
 	t.Cleanup(cleanup)
 

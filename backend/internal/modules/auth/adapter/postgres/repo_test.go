@@ -28,6 +28,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestAuthRepo_CreateUser(t *testing.T) {
+	testutil.SkipOnShort(t)
 	ctx := context.Background()
 	repo := NewAuthRepo(testPool)
 	if err := testutil.TruncateAll(ctx, testPool); err != nil {
@@ -96,6 +97,7 @@ func TestAuthRepo_CreateUser(t *testing.T) {
 }
 
 func TestAuthRepo_GetByGoogleID(t *testing.T) {
+	testutil.SkipOnShort(t)
 	ctx := context.Background()
 	repo := NewAuthRepo(testPool)
 	if err := testutil.TruncateAll(ctx, testPool); err != nil {
@@ -132,6 +134,7 @@ func TestAuthRepo_GetByGoogleID(t *testing.T) {
 }
 
 func TestAuthRepo_GetByID(t *testing.T) {
+	testutil.SkipOnShort(t)
 	ctx := context.Background()
 	repo := NewAuthRepo(testPool)
 	if err := testutil.TruncateAll(ctx, testPool); err != nil {
@@ -165,6 +168,7 @@ func TestAuthRepo_GetByID(t *testing.T) {
 }
 
 func TestAuthRepo_GetByStreamKeyHash(t *testing.T) {
+	testutil.SkipOnShort(t)
 	ctx := context.Background()
 	repo := NewAuthRepo(testPool)
 	if err := testutil.TruncateAll(ctx, testPool); err != nil {
@@ -198,6 +202,7 @@ func TestAuthRepo_GetByStreamKeyHash(t *testing.T) {
 }
 
 func TestAuthRepo_GetUserIDByStreamKeyHash(t *testing.T) {
+	testutil.SkipOnShort(t)
 	ctx := context.Background()
 	repo := NewAuthRepo(testPool)
 	if err := testutil.TruncateAll(ctx, testPool); err != nil {
@@ -231,6 +236,7 @@ func TestAuthRepo_GetUserIDByStreamKeyHash(t *testing.T) {
 }
 
 func TestAuthRepo_UpdateStreamKey(t *testing.T) {
+	testutil.SkipOnShort(t)
 	ctx := context.Background()
 	repo := NewAuthRepo(testPool)
 	if err := testutil.TruncateAll(ctx, testPool); err != nil {
@@ -258,6 +264,7 @@ func TestAuthRepo_UpdateStreamKey(t *testing.T) {
 }
 
 func TestAuthRepo_UpdateSettings(t *testing.T) {
+	testutil.SkipOnShort(t)
 	ctx := context.Background()
 	repo := NewAuthRepo(testPool)
 	if err := testutil.TruncateAll(ctx, testPool); err != nil {
@@ -287,6 +294,7 @@ func TestAuthRepo_UpdateSettings(t *testing.T) {
 }
 
 func TestAuthRepo_SetLiveStatus(t *testing.T) {
+	testutil.SkipOnShort(t)
 	ctx := context.Background()
 	repo := NewAuthRepo(testPool)
 	if err := testutil.TruncateAll(ctx, testPool); err != nil {
@@ -326,6 +334,7 @@ func TestAuthRepo_SetLiveStatus(t *testing.T) {
 }
 
 func TestAuthRepo_GetLiveUsers(t *testing.T) {
+	testutil.SkipOnShort(t)
 	ctx := context.Background()
 	repo := NewAuthRepo(testPool)
 	if err := testutil.TruncateAll(ctx, testPool); err != nil {

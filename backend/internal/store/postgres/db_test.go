@@ -106,6 +106,7 @@ func TestWithTx(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGetUser(t *testing.T) {
+	testutil.SkipOnShort(t)
 	if err := testutil.TruncateAll(context.Background(), testPool); err != nil {
 		t.Fatalf("truncate: %v", err)
 	}

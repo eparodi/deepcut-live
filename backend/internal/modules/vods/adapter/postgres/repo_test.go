@@ -57,6 +57,7 @@ func seedVODStream(t *testing.T, ctx context.Context, repo *VODRepo, userID stri
 }
 
 func TestVODRepo_GetVOD(t *testing.T) {
+	testutil.SkipOnShort(t)
 	ctx := context.Background()
 	repo := NewVODRepo(testPool)
 	if err := testutil.TruncateAll(ctx, testPool); err != nil {
@@ -94,6 +95,7 @@ func TestVODRepo_GetVOD(t *testing.T) {
 }
 
 func TestVODRepo_ListVODs(t *testing.T) {
+	testutil.SkipOnShort(t)
 	ctx := context.Background()
 	repo := NewVODRepo(testPool)
 	if err := testutil.TruncateAll(ctx, testPool); err != nil {
@@ -145,6 +147,7 @@ func TestVODRepo_ListVODs(t *testing.T) {
 }
 
 func TestVODRepo_SearchVODs(t *testing.T) {
+	testutil.SkipOnShort(t)
 	ctx := context.Background()
 	repo := NewVODRepo(testPool)
 	if err := testutil.TruncateAll(ctx, testPool); err != nil {
@@ -245,6 +248,7 @@ func TestVODRepo_SearchVODs(t *testing.T) {
 }
 
 func TestVODRepo_IncrementViewCount(t *testing.T) {
+	testutil.SkipOnShort(t)
 	ctx := context.Background()
 	repo := NewVODRepo(testPool)
 	if err := testutil.TruncateAll(ctx, testPool); err != nil {

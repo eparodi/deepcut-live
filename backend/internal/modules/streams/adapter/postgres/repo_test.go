@@ -42,6 +42,7 @@ func seedUserRaw(t *testing.T, ctx context.Context, repo *StreamRepo, googleID, 
 }
 
 func TestStreamRepo_CreateStream(t *testing.T) {
+	testutil.SkipOnShort(t)
 	ctx := context.Background()
 	repo := NewStreamRepo(testPool)
 	if err := testutil.TruncateAll(ctx, testPool); err != nil {
@@ -72,6 +73,7 @@ func TestStreamRepo_CreateStream(t *testing.T) {
 }
 
 func TestStreamRepo_EndStream(t *testing.T) {
+	testutil.SkipOnShort(t)
 	ctx := context.Background()
 	repo := NewStreamRepo(testPool)
 	if err := testutil.TruncateAll(ctx, testPool); err != nil {
@@ -103,6 +105,7 @@ func TestStreamRepo_EndStream(t *testing.T) {
 }
 
 func TestStreamRepo_UpdateStreamStatus(t *testing.T) {
+	testutil.SkipOnShort(t)
 	ctx := context.Background()
 	repo := NewStreamRepo(testPool)
 	if err := testutil.TruncateAll(ctx, testPool); err != nil {
@@ -134,6 +137,7 @@ func TestStreamRepo_UpdateStreamStatus(t *testing.T) {
 }
 
 func TestStreamRepo_GetStreamByUserID(t *testing.T) {
+	testutil.SkipOnShort(t)
 	ctx := context.Background()
 	repo := NewStreamRepo(testPool)
 	if err := testutil.TruncateAll(ctx, testPool); err != nil {
@@ -169,6 +173,7 @@ func TestStreamRepo_GetStreamByUserID(t *testing.T) {
 }
 
 func TestStreamRepo_GetStreamBySRSClientID(t *testing.T) {
+	testutil.SkipOnShort(t)
 	ctx := context.Background()
 	repo := NewStreamRepo(testPool)
 	if err := testutil.TruncateAll(ctx, testPool); err != nil {
@@ -204,6 +209,7 @@ func TestStreamRepo_GetStreamBySRSClientID(t *testing.T) {
 }
 
 func TestStreamRepo_ListLiveStreams(t *testing.T) {
+	testutil.SkipOnShort(t)
 	ctx := context.Background()
 	repo := NewStreamRepo(testPool)
 	if err := testutil.TruncateAll(ctx, testPool); err != nil {
@@ -243,6 +249,7 @@ func TestStreamRepo_ListLiveStreams(t *testing.T) {
 }
 
 func TestStreamRepo_GetChannelInfo(t *testing.T) {
+	testutil.SkipOnShort(t)
 	ctx := context.Background()
 	repo := NewStreamRepo(testPool)
 	if err := testutil.TruncateAll(ctx, testPool); err != nil {
@@ -276,6 +283,7 @@ func TestStreamRepo_GetChannelInfo(t *testing.T) {
 }
 
 func TestStreamRepo_UpsertViewer(t *testing.T) {
+	testutil.SkipOnShort(t)
 	ctx := context.Background()
 	repo := NewStreamRepo(testPool)
 	if err := testutil.TruncateAll(ctx, testPool); err != nil {
@@ -322,6 +330,7 @@ func TestStreamRepo_UpsertViewer(t *testing.T) {
 }
 
 func TestStreamRepo_HeartbeatViewer(t *testing.T) {
+	testutil.SkipOnShort(t)
 	ctx := context.Background()
 	repo := NewStreamRepo(testPool)
 	if err := testutil.TruncateAll(ctx, testPool); err != nil {
@@ -365,6 +374,7 @@ func TestStreamRepo_HeartbeatViewer(t *testing.T) {
 }
 
 func TestStreamRepo_RemoveViewer(t *testing.T) {
+	testutil.SkipOnShort(t)
 	ctx := context.Background()
 	repo := NewStreamRepo(testPool)
 	if err := testutil.TruncateAll(ctx, testPool); err != nil {
@@ -405,6 +415,7 @@ func TestStreamRepo_RemoveViewer(t *testing.T) {
 }
 
 func TestStreamRepo_GetViewerCount(t *testing.T) {
+	testutil.SkipOnShort(t)
 	ctx := context.Background()
 	repo := NewStreamRepo(testPool)
 	if err := testutil.TruncateAll(ctx, testPool); err != nil {
@@ -435,6 +446,7 @@ func TestStreamRepo_GetViewerCount(t *testing.T) {
 }
 
 func TestStreamRepo_GetAnalytics(t *testing.T) {
+	testutil.SkipOnShort(t)
 	ctx := context.Background()
 	repo := NewStreamRepo(testPool)
 	if err := testutil.TruncateAll(ctx, testPool); err != nil {
@@ -483,6 +495,7 @@ func TestStreamRepo_GetAnalytics(t *testing.T) {
 }
 
 func TestStreamRepo_UpdateStreamAnalytics(t *testing.T) {
+	testutil.SkipOnShort(t)
 	ctx := context.Background()
 	repo := NewStreamRepo(testPool)
 	if err := testutil.TruncateAll(ctx, testPool); err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -29,14 +30,14 @@ func SetupTestDB(t *testing.T) (*pgxpool.Pool, testcontainers.Container) {
 // testcontainers Postgres container (for local dev with Docker).
 // Returns a pool and a cleanup function (caller must defer cleanup()).
 func SetupDB(ctx context.Context) (*pgxpool.Pool, func(), error) {
+	if isShortFlag() {
+		return nil, func() {}, nil
+	}
 	if url := os.Getenv("DATABASE_URL"); url != "" {
+		// CI mode: connect directly; migrations were already run by golang-migrate.
 		pool, err := pgxpool.New(ctx, url)
 		if err != nil {
 			return nil, nil, fmt.Errorf("connect to DATABASE_URL: %w", err)
-		}
-		if err := runMigrations(ctx, pool); err != nil {
-			pool.Close()
-			return nil, nil, fmt.Errorf("run migrations on DATABASE_URL: %w", err)
 		}
 		return pool, func() { pool.Close() }, nil
 	}
@@ -168,10 +169,30 @@ func TruncateAllT(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	}
 }
 
+// isShortFlag checks os.Args for -test.short (without calling testing.Short,
+// which panics if flag.Parse hasn't been called yet — as happens in TestMain).
+func isShortFlag() bool {
+	for _, a := range os.Args {
+		if a == "-test.short" || strings.HasPrefix(a, "-test.short=") {
+			return true
+		}
+	}
+	return false
+}
+
 // FatalIf panics with a message to os.Stderr — for use in TestMain where testing.T is unavailable.
 func FatalIf(err error, msg string) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", msg, err)
 		os.Exit(1)
+	}
+}
+
+// SkipOnShort skips the test if the -short flag is set. Call this as the first
+// line in any test function that requires a database connection.
+func SkipOnShort(t *testing.T) {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("skipping DB-dependent test in short mode")
 	}
 }
