@@ -137,6 +137,28 @@ going to do. This prevents scope creep and clarifies boundaries.
 - Fix all lint errors before considering work done. Do not suppress
   warnings unless explicitly asked.
 
+### 4.4 CI/CD Conventions
+
+When creating or modifying CI workflows:
+
+- **Pin tool versions.** Every CLI tool installed in CI must use an exact
+  version, never `@latest`. This includes `go install`, `npm install -g`,
+  and any direct binary downloads.
+  - ❌ `go install example.com/cmd/tool@latest`
+  - ✅ `go install example.com/cmd/tool@v1.2.3`
+
+- **Verify binary integrity.** Downloaded binaries must be checksum-verified
+  or installed via a package manager (`go install`, `npm ci`, `apt`). Avoid
+  `curl | bash` and `curl | tar | sudo mv` patterns.
+  - ❌ `curl -L url | tar xvz && sudo mv binary /usr/local/bin`
+  - ✅ `go install example.com/cmd/tool@v1.2.3`
+
+- **Source versions from project files.** Go version must be read from
+  `go.mod` via `go-version-file`, not hardcoded. Node version must be read
+  from `.nvmrc` via `node-version-file`.
+  - ❌ `go-version: "1.22"` (hardcoded)
+  - ✅ `go-version-file: backend/go.mod`
+
 ---
 
 ## Section 5 — Git & Commit Hygiene
