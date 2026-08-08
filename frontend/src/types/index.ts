@@ -9,7 +9,7 @@ export interface User {
   name: string;
   email: string;
   avatarUrl: string;
-  streamKey: string;
+  streamKey?: string;
   streamTitle: string | null;
   streamCategory: string | null;
   isLive: boolean;

@@ -1,14 +1,17 @@
 package http
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 
 	"github.com/deepcut/live/internal/modules/streams/application"
 	"github.com/deepcut/live/internal/shared/errs"
@@ -36,27 +39,35 @@ func (h *StreamHandler) RegisterRoutes(r chi.Router) {
 }
 
 // SRSCallback handles SRS on_publish/on_unpublish by dispatching based on the action field.
+// Reads the body once, then restores it so dispatch handlers can re-read.
 func (h *StreamHandler) SRSCallback(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
-	var body struct {
-		Action   string `json:"action"`
-		ClientID int    `json:"client_id"`
-		Stream   string `json:"stream"`
-	}
-	r.Body = http.MaxBytesReader(w, r.Body, 4096)
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	// Read the body once into memory so dispatch handlers can re-read it
+	bodyBytes, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 4096))
+	if err != nil {
 		w.Write([]byte("1"))
 		return
 	}
 
-	switch body.Action {
+	var actionCheck struct {
+		Action string `json:"action"`
+	}
+	if err := json.Unmarshal(bodyBytes, &actionCheck); err != nil {
+		w.Write([]byte("1"))
+		return
+	}
+
+	// Restore body so dispatch handlers can read it
+	r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+
+	switch actionCheck.Action {
 	case "on_publish":
 		h.SRSOnPublish(w, r)
 	case "on_unpublish":
 		h.SRSOnUnpublish(w, r)
 	default:
-		h.logger.Warn("unknown srs action", "action", body.Action)
+		h.logger.Warn("unknown srs action", "action", actionCheck.Action)
 		w.Write([]byte("0"))
 	}
 }
@@ -164,6 +175,10 @@ func (h *StreamHandler) GetChannelInfo(w http.ResponseWriter, r *http.Request) {
 	userID := chi.URLParam(r, "userID")
 	if userID == "" {
 		render.Error(w, r, errs.BadRequest("missing user ID"))
+		return
+	}
+	if _, err := uuid.Parse(userID); err != nil {
+		render.Error(w, r, errs.BadRequest("invalid user ID — must be a UUID"))
 		return
 	}
 

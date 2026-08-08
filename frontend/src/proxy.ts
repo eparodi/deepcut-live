@@ -7,7 +7,7 @@ import type { NextRequest } from "next/server";
  * - `/dashboard/*`: requires `token` cookie (JWT from backend).
  *   Redirects unauthenticated users to `/`.
  */
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const token = request.cookies.get("token")?.value;
 
   // Protect dashboard routes

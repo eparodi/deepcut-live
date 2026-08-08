@@ -62,7 +62,7 @@ func main() {
 	authSvc := authapp.NewAuthService(authRepo, googleClientID, googleClientSecret, baseURL, privateKeyPEM, publicKeyPEM)
 	streamSvc := streamapp.NewStreamService(streamRepo, authRepo, srsSecret)
 
-	authHandler := authhttp.NewAuthHandler(authSvc, streamSvc, logger)
+	authHandler := authhttp.NewAuthHandler(authSvc, streamSvc, baseURL, logger)
 	streamHandler := streamhttp.NewStreamHandler(streamSvc, logger)
 
 	r := chi.NewRouter()

@@ -1,10 +1,9 @@
 "use client";
-// Client Component — needs useState for form state, toasts, interaction handlers.
-// Data is fetched via React 19's `use()` hook with Suspense boundaries.
+// Client Component — data fetched on client mount to avoid SSR auth cookie issues.
 
-import { useState, useCallback, use } from "react";
+import { useState, useCallback, useEffect, Component } from "react";
 import Link from "next/link";
-import { Component, Suspense, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { getMe, getAnalytics } from "@/lib/api";
 import type { User, Analytics } from "@/types";
 import { StreamKeyDisplay } from "@/components/StreamKeyDisplay";
@@ -15,43 +14,38 @@ import { ForceEndButton } from "@/components/ForceEndButton";
 import { useToast } from "@/components/ui/Toast";
 
 // ============================================================
-// Cached promise helpers for React 19 `use()` data fetching.
-// Avoids the setState-in-effect lint error.
-// ============================================================
-
-let userPromise: Promise<User> | null = null;
-let analyticsPromise: Promise<Analytics> | null = null;
-
-function fetchUser(): Promise<User> {
-  if (!userPromise) userPromise = getMe();
-  return userPromise;
-}
-
-function fetchAnalytics(): Promise<Analytics> {
-  if (!analyticsPromise) analyticsPromise = getAnalytics("week");
-  return analyticsPromise;
-}
-
-function resetDataPromises() {
-  userPromise = null;
-  analyticsPromise = null;
-}
-
-// ============================================================
-// Dashboard Content (inner — unpacked from Suspense)
+// Dashboard Content
 // ============================================================
 
 function DashboardContent() {
-  const user = use(fetchUser());
-  const analytics = use(fetchAnalytics());
-
-  const [currentUser, setCurrentUser] = useState(user);
+  // All hooks at the top — React requires consistent order across renders.
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [analytics, setAnalytics] = useState<Analytics | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [streamEnded, setStreamEnded] = useState(false);
   const { showToast, ToastComponent } = useToast();
 
+  // Fetch data on client mount only — SSR has no auth cookies.
+  const fetchData = useCallback(() => {
+    setLoading(true);
+    setLoadError(null);
+    Promise.all([getMe(), getAnalytics("week")])
+      .then(([u, a]) => {
+        setCurrentUser(u);
+        setAnalytics(a);
+      })
+      .catch((e) => setLoadError(e instanceof Error ? e.message : "Failed to load"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
   const handleRegeneratedKey = useCallback(
     (newKey: string) => {
-      setCurrentUser((prev) => ({ ...prev, streamKey: newKey }));
+      setCurrentUser((prev) => prev ? { ...prev, streamKey: newKey } : prev);
       showToast("New stream key generated!", "success");
     },
     [showToast]
@@ -59,11 +53,9 @@ function DashboardContent() {
 
   const handleSettingsSaved = useCallback(
     (title: string, category: string) => {
-      setCurrentUser((prev) => ({
-        ...prev,
-        streamTitle: title,
-        streamCategory: category,
-      }));
+      setCurrentUser((prev) =>
+        prev ? { ...prev, streamTitle: title, streamCategory: category } : prev
+      );
       showToast("Settings saved!", "success");
     },
     [showToast]
@@ -71,13 +63,39 @@ function DashboardContent() {
 
   const handleStreamEnded = useCallback(() => {
     setStreamEnded(true);
-    setCurrentUser((prev) => ({ ...prev, isLive: false }));
+    setCurrentUser((prev) => (prev ? { ...prev, isLive: false } : prev));
   }, []);
 
   const handleError = useCallback(
     (message: string) => showToast(message, "error"),
     [showToast]
   );
+
+  // Early returns AFTER all hooks — all renders call the same hooks.
+  if (loading) return <DashboardSkeleton />;
+
+  if (loadError) {
+    return (
+      <DashboardLayout>
+        <div
+          className="rounded-xl p-8 text-center"
+          style={{ backgroundColor: "var(--color-surface-raised)" }}
+        >
+          <p className="text-[var(--color-text-muted)] text-lg">Could not load dashboard</p>
+          <p className="mt-2 text-sm" style={{ color: "var(--color-danger)" }}>{loadError}</p>
+          <button
+            onClick={fetchData}
+            className="mt-4 inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:opacity-90"
+            style={{ backgroundColor: "var(--color-primary)" }}
+          >
+            Retry
+          </button>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!currentUser) return null;
 
   return (
     <DashboardLayout user={currentUser}>
@@ -119,7 +137,7 @@ function DashboardContent() {
           analytics={analytics}
           loading={false}
           error={null}
-          onRetry={resetDataPromises}
+          onRetry={fetchData}
         />
 
         {currentUser.isLive && (
@@ -150,9 +168,7 @@ function DashboardContent() {
 export default function DashboardPage() {
   return (
     <DataErrorBoundary>
-      <Suspense fallback={<DashboardSkeleton />}>
-        <DashboardContent />
-      </Suspense>
+      <DashboardContent />
     </DataErrorBoundary>
   );
 }
@@ -197,8 +213,8 @@ class DataErrorBoundary extends Component<EBProps, EBState> {
             </p>
             <button
               onClick={() => {
-                resetDataPromises();
                 this.setState({ error: null });
+                window.location.reload();
               }}
               className="mt-4 inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:opacity-90"
               style={{ backgroundColor: "var(--color-primary)" }}

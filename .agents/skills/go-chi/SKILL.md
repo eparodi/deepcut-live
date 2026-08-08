@@ -221,6 +221,75 @@ func (h *Handlers) CreateUser(w http.ResponseWriter, r *http.Request) {
 | `w.Write([]byte(...))` for JSON | Use `json.NewEncoder(w).Encode(v)` |
 | Ignore `r.Body` size | Use `http.MaxBytesReader` to limit body size |
 
+### DO — Validate path parameters before the database
+
+Path params (UUIDs, emails, enum values) must be validated in the HTTP
+handler layer, not in SQL queries. A malformed input that reaches the
+database returns a cryptic 500. Catch it at the edge and return 400.
+
+```go
+import "github.com/google/uuid"
+
+func (h *Handlers) GetChannelInfo(w http.ResponseWriter, r *http.Request) {
+    userID := chi.URLParam(r, "userID")
+    if userID == "" {
+        render.Error(w, r, errs.BadRequest("missing user ID"))
+        return
+    }
+    if _, err := uuid.Parse(userID); err != nil {
+        render.Error(w, r, errs.BadRequest("invalid user ID — must be a UUID"))
+        return
+    }
+    // ... proceed to service layer
+}
+```
+
+### DO — Restore request body for dispatch routers
+
+`r.Body` is consumed on first read. When a handler reads the body to
+determine which sub-handler to dispatch to, the sub-handler gets an empty
+body. Restore it with `io.NopCloser`:
+
+```go
+import (
+    "bytes"
+    "io"
+)
+
+func (h *Handlers) DispatchCallback(w http.ResponseWriter, r *http.Request) {
+    defer r.Body.Close()
+
+    // Read once into memory
+    bodyBytes, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 4096))
+    if err != nil {
+        w.WriteHeader(http.StatusBadRequest)
+        return
+    }
+
+    // Check action field only
+    var actionCheck struct{ Action string `json:"action"` }
+    if err := json.Unmarshal(bodyBytes, &actionCheck); err != nil {
+        w.WriteHeader(http.StatusBadRequest)
+        return
+    }
+
+    // Restore body so sub-handler can read it
+    r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+
+    switch actionCheck.Action {
+    case "on_publish":
+        h.handlePublish(w, r)
+    case "on_unpublish":
+        h.handleUnpublish(w, r)
+    default:
+        w.WriteHeader(http.StatusOK)
+    }
+}
+```
+
+This pattern applies to webhook routers, SRS callbacks, and any handler
+that dispatches based on body content.
+
 ### DO — All four server timeouts
 
 ```go
@@ -600,3 +669,6 @@ Before claiming an endpoint is "stable":
 - [ ] Table-driven tests cover: happy path + each error path + edge cases
 - [ ] Integration test hits the router with a real request
 - [ ] `go build ./...` and `go vet ./...` pass
+- [ ] Path parameters validated before database (UUIDs, enums, etc.)
+- [ ] Body restore pattern used for dispatch routers (never pass consumed body)
+- [ ] SRS/webhook callback URLs include `?secret=...` in config, not just code
