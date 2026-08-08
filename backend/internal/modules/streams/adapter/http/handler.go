@@ -52,7 +52,9 @@ func (h *StreamHandler) SRSOnPublish(w http.ResponseWriter, r *http.Request) {
 		Param    string `json:"param"` // contains ?secret=...&key=...
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 4096)
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&body); err != nil {
 		render.Error(w, r, errs.BadRequest("invalid JSON: %v", err))
 		return
 	}
@@ -100,7 +102,9 @@ func (h *StreamHandler) SRSOnUnpublish(w http.ResponseWriter, r *http.Request) {
 		ClientID int    `json:"client_id"`
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 4096)
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&body); err != nil {
 		render.Error(w, r, errs.BadRequest("invalid JSON: %v", err))
 		return
 	}
@@ -166,7 +170,9 @@ func (h *StreamHandler) ViewerHeartbeat(w http.ResponseWriter, r *http.Request) 
 
 	var req heartbeatRequest
 	r.Body = http.MaxBytesReader(w, r.Body, 4096)
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
 		render.Error(w, r, errs.BadRequest("invalid JSON: %v", err))
 		return
 	}

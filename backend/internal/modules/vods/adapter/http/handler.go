@@ -34,8 +34,6 @@ func (h *VODHandler) RegisterRoutes(r chi.Router) {
 
 // GetVOD returns a single VOD by ID.
 func (h *VODHandler) GetVOD(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
-
 	vodID := chi.URLParam(r, "vodID")
 	if vodID == "" {
 		render.Error(w, r, errs.BadRequest("missing vod ID"))
@@ -52,8 +50,6 @@ func (h *VODHandler) GetVOD(w http.ResponseWriter, r *http.Request) {
 
 // SearchVODs searches VODs with filters and pagination.
 func (h *VODHandler) SearchVODs(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
-
 	q := r.URL.Query()
 	limit := parseIntParam(q.Get("limit"), 20, 1, 100)
 	offset := parseIntParam(q.Get("offset"), 0, 0, 10000)
@@ -77,8 +73,6 @@ func (h *VODHandler) SearchVODs(w http.ResponseWriter, r *http.Request) {
 
 // ListUserVODs returns VODs for a specific user.
 func (h *VODHandler) ListUserVODs(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
-
 	userID := chi.URLParam(r, "userID")
 	if userID == "" {
 		render.Error(w, r, errs.BadRequest("missing user ID"))

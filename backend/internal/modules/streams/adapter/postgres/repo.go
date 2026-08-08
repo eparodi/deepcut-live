@@ -144,6 +144,9 @@ func (r *StreamRepo) ListLiveStreams(ctx context.Context) ([]domain.LiveStream, 
 		ls.StartedAt = startedAt.Format("2006-01-02T15:04:05Z")
 		result = append(result, ls)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows iteration: %w", err)
+	}
 	return result, nil
 }
 
