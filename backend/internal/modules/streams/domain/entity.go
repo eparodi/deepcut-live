@@ -21,6 +21,10 @@ type Stream struct {
 }
 
 // LiveStream combines a stream with its channel owner info for the public live list.
+//
+// NOTE: HlsPath is mapped to json:"thumbnailUrl" as a pragmatic stopgap.
+// The hls_path column is the HLS playlist URL, not a thumbnail image.
+// A proper thumbnail generation pipeline should be added in a future spec.
 type LiveStream struct {
 	StreamID    string  `json:"streamId"`
 	UserID      string  `json:"userId"`
@@ -49,6 +53,8 @@ type ChannelInfo struct {
 // Analytics holds aggregated streaming statistics.
 type Analytics struct {
 	Period        string `json:"period"`
+	StartDate     string `json:"startDate"`
+	EndDate       string `json:"endDate"`
 	TotalSeconds  int    `json:"totalStreamTimeSeconds"`
 	PeakViewers   int    `json:"peakViewers"`
 	UniqueViewers int    `json:"totalUniqueViewers"`

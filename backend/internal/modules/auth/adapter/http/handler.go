@@ -41,7 +41,7 @@ type authService interface {
 // streamOps is the subset of stream service methods that AuthHandler needs.
 type streamOps interface {
 	GetAnalytics(ctx context.Context, userID, period string) (*streamsdomain.Analytics, error)
-	ForceEndStream(ctx context.Context, userID string) error
+	ForceEndStream(ctx context.Context, userID string) (string, error)
 }
 
 type AuthHandler struct {
@@ -201,14 +201,14 @@ func (h *AuthHandler) GoogleOAuthCallback(w http.ResponseWriter, r *http.Request
 }
 
 type getMeResponse struct {
-	ID          string  `json:"id"`
-	Email       string  `json:"email"`
-	Name        string  `json:"name"`
-	AvatarURL   *string `json:"avatarUrl"`
-	StreamKey   *string `json:"streamKey,omitempty"`
-	StreamTitle *string `json:"streamTitle"`
-	IsLive      bool    `json:"isLive"`
-	CreatedAt   string  `json:"createdAt"`
+	ID             string  `json:"id"`
+	Email          string  `json:"email"`
+	Name           string  `json:"name"`
+	AvatarURL      *string `json:"avatarUrl"`
+	StreamKey      *string `json:"streamKey,omitempty"`
+	StreamTitle    *string `json:"streamTitle"`
+	StreamCategory *string `json:"streamCategory"`
+	IsLive         bool    `json:"isLive"`
 }
 
 // GetMe returns the authenticated user's profile.
@@ -228,13 +228,13 @@ func (h *AuthHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	render.JSON(w, http.StatusOK, getMeResponse{
-		ID:          user.ID,
-		Email:       user.Email,
-		Name:        user.Name,
-		AvatarURL:   user.AvatarURL,
-		StreamTitle: user.StreamTitle,
-		IsLive:      user.IsLive,
-		CreatedAt:   user.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		ID:             user.ID,
+		Email:          user.Email,
+		Name:           user.Name,
+		AvatarURL:      user.AvatarURL,
+		StreamTitle:    user.StreamTitle,
+		StreamCategory: user.StreamCategory,
+		IsLive:         user.IsLive,
 	})
 }
 
@@ -285,6 +285,11 @@ type updateSettingsRequest struct {
 	Category *string `json:"streamCategory"`
 }
 
+type updateSettingsResponse struct {
+	StreamTitle    string  `json:"streamTitle"`
+	StreamCategory *string `json:"streamCategory"`
+}
+
 // UpdateSettings updates the authenticated user's stream settings.
 func (h *AuthHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
@@ -304,13 +309,24 @@ func (h *AuthHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate and extract title (required, 1-100 chars after trimming).
 	title := ""
 	if req.Title != nil {
-		title = *req.Title
+		title = strings.TrimSpace(*req.Title)
 	}
+	if title == "" || len(title) > 100 {
+		render.Error(w, r, errs.BadRequest("streamTitle is required and must be 1-100 characters"))
+		return
+	}
+
+	// Validate category (optional, max 100 chars when provided).
 	category := ""
 	if req.Category != nil {
-		category = *req.Category
+		category = strings.TrimSpace(*req.Category)
+	}
+	if category != "" && len(category) > 100 {
+		render.Error(w, r, errs.BadRequest("streamCategory must be 100 characters or fewer"))
+		return
 	}
 
 	if err := h.svc.UpdateSettings(r.Context(), userID, title, category); err != nil {
@@ -318,7 +334,16 @@ func (h *AuthHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	render.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	// Build response: category is null when cleared/not-provided (nil or empty).
+	var respCategory *string
+	if req.Category != nil && *req.Category != "" {
+		respCategory = req.Category
+	}
+
+	render.JSON(w, http.StatusOK, updateSettingsResponse{
+		StreamTitle:    title,
+		StreamCategory: respCategory,
+	})
 }
 
 // GetAnalytics returns stream analytics for the authenticated user.
@@ -332,6 +357,10 @@ func (h *AuthHandler) GetAnalytics(w http.ResponseWriter, r *http.Request) {
 	period := r.URL.Query().Get("period")
 	if period == "" {
 		period = "week"
+	}
+	if period != "week" && period != "month" && period != "all" {
+		render.Error(w, r, errs.BadRequest("invalid period: %s; expected week, month, or all", period))
+		return
 	}
 
 	analytics, err := h.streamSvc.GetAnalytics(r.Context(), userID, period)
@@ -351,10 +380,14 @@ func (h *AuthHandler) ForceEndStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.streamSvc.ForceEndStream(r.Context(), userID); err != nil {
+	msg, err := h.streamSvc.ForceEndStream(r.Context(), userID)
+	if err != nil {
 		render.Error(w, r, fmt.Errorf("force end stream: %w", err))
 		return
 	}
 
-	render.JSON(w, http.StatusOK, map[string]string{"status": "offline"})
+	render.JSON(w, http.StatusOK, map[string]string{
+		"status":  "offline",
+		"message": msg,
+	})
 }

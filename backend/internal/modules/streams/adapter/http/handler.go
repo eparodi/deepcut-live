@@ -171,6 +171,11 @@ func (h *StreamHandler) SRSOnUnpublish(w http.ResponseWriter, r *http.Request) {
 	render.JSON(w, http.StatusOK, map[string]any{"code": 0})
 }
 
+type liveStreamsResponse struct {
+	Streams []domain.LiveStream `json:"streams"`
+	Total   int                 `json:"total"`
+}
+
 // ListLiveStreams returns all currently live streams.
 func (h *StreamHandler) ListLiveStreams(w http.ResponseWriter, r *http.Request) {
 	streams, err := h.svc.ListLive(r.Context())
@@ -178,7 +183,16 @@ func (h *StreamHandler) ListLiveStreams(w http.ResponseWriter, r *http.Request) 
 		render.Error(w, r, fmt.Errorf("list live: %w", err))
 		return
 	}
-	render.JSON(w, http.StatusOK, streams)
+
+	// Ensure we never marshal a null "streams" field — empty list must be [].
+	if streams == nil {
+		streams = []domain.LiveStream{}
+	}
+
+	render.JSON(w, http.StatusOK, liveStreamsResponse{
+		Streams: streams,
+		Total:   len(streams),
+	})
 }
 
 // GetChannelInfo returns public channel info for a user.

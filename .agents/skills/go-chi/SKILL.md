@@ -294,6 +294,8 @@ if errors.As(err, &appErr) {
 | Panic in handler | Return error; Recoverer middleware catches panics |
 | `errors.New("user not found")` | `errs.NotFound("user %s not found", id)` |
 | `_ = someFunc()` (discard error) | At minimum `slog.Error("op failed", "err", err)`. If the error is truly non-critical, log it. |
+| Return `errs.NotFound` for "no active stream to end" | Return `errs.Conflict` — the user exists, but their state (not-live) prevents the operation. 409 is semantically correct for state conflicts. |
+| Return `errs.NotFound` when the resource exists but in wrong state | Use `errs.Conflict("no active stream to end")`. NotFound should be reserved for truly missing resources (wrong user ID, deleted entity). |
 
 **Bare error returns are banned.** Every error crossing a layer boundary must be wrapped with context. This is not optional — unwrapped errors make debugging production incidents near-impossible.
 
@@ -416,6 +418,40 @@ if err := decoder.Decode(&input); err != nil {
 | `json.Marshal` in handler | `json.NewEncoder(w).Encode(v)` (streams) |
 | Ignore JSON syntax errors | Switch on `*json.SyntaxError`, `*json.UnmarshalTypeError` |
 | `interface{}` for partial JSON | Define a typed struct even for partial data |
+
+### DO — Match response shapes to frontend contract
+
+**Rule:** Before writing a handler response struct, read the frontend TypeScript type from `frontend/src/types/index.ts`. The Go `json` tags must match the TypeScript field names **exactly**. The JSON response shape (wrapper objects, arrays vs. single objects) must match what the frontend expects.
+
+```go
+// ✅ Frontend type: { streams: LiveStream[]; total: number }
+// Go handler:
+render.JSON(w, http.StatusOK, map[string]any{
+    "streams": streams,
+    "total":   len(streams),
+})
+
+// ❌ Wrong: bare array
+render.JSON(w, http.StatusOK, streams) // Frontend expects LiveStreamsResponse, not LiveStream[]
+
+// ❌ Wrong: generic success response when frontend expects echoed fields
+render.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
+// Frontend expects: { streamTitle: string; streamCategory: string | null }
+```
+
+| ❌ Wrong | ✅ Right |
+|---|---|
+| Return bare array when frontend expects `{streams, total}` wrapper | Wrap in the response struct the frontend type defines |
+| Return `{"status":"ok"}` when frontend expects echoed fields | Return the fields the frontend expects (e.g., `{streamTitle, streamCategory}`) |
+| Include extra fields not in the frontend type (e.g., `createdAt` when not in `User`) | Only include fields present in the frontend TypeScript interface |
+| Omit fields that the frontend type declares (e.g., missing `streamCategory`) | Include all fields from the frontend type, even if `null` |
+| Guess field names from database column names | Read `frontend/src/types/index.ts` and use the exact camelCase key names |
+
+**Pre-implementation checklist for every handler response:**
+1. `grep` the interface name in `frontend/src/types/index.ts`
+2. Copy every field name into your Go struct tags (camelCase, exactly)
+3. Verify wrapper objects match (is it `T` or `{items: T[]; total: N}`?)
+4. Verify optional fields use `*string` + `omitempty` when the frontend type has `?:`
 
 ## Context Propagation
 
@@ -581,3 +617,6 @@ Before claiming an endpoint is "stable":
 - [ ] Integration test hits the router with a real request
 - [ ] `go build ./...` and `go vet ./...` pass
 - [ ] Dev-default secrets log a `slog.Warn` at startup
+- [ ] Response shape verified against frontend types: `grep -A 20 "interface <Name>" frontend/src/types/index.ts` — all fields present, no extra fields, wrapper objects match
+- [ ] HTTP status codes are semantically correct: 409 for state conflicts (not 404), 400 for validation (not 500)
+- [ ] All handler inputs validated: required fields checked, enums checked, lengths checked — validation lives in the handler (HTTP layer), not the service
