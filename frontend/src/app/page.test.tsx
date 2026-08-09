@@ -4,9 +4,9 @@ import { render, screen } from "@testing-library/react";
 // ── Mocks ──────────────────────────────────────────────────────
 
 vi.mock("@/components/LiveGrid", () => ({
-  LiveGrid: ({ streams, total }: { streams: unknown[]; total: number }) => (
+  LiveGrid: (props: { streams: unknown[]; total: number }) => (
     <div data-testid="live-grid">
-      LiveGrid: {total} stream{total !== 1 ? "s" : ""}
+      LiveGrid: {props.total} stream{props.total !== 1 ? "s" : ""}
     </div>
   ),
 }));

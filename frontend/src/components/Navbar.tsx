@@ -27,6 +27,7 @@ export function Navbar({ initialSignedIn }: NavbarProps) {
   }, [initialSignedIn]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount is the intended pattern
     fetchUser();
   }, [fetchUser]);
 
