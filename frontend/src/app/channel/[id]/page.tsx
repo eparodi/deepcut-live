@@ -53,56 +53,20 @@ export default async function ChannelPage({ params }: ChannelPageProps) {
     throw error;
   }
 
-  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081";
-
   return (
     <div className="min-h-full flex flex-col">
-      {/* Header */}
-      <header
-        className="w-full border-b"
-        style={{ borderColor: "var(--color-surface-raised)" }}
-      >
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link
-              href="/"
-              className="font-bold text-xl"
-              style={{ color: "var(--color-primary)" }}
-            >
-              DeepCut
-            </Link>
-            <Link
-              href="/"
-              className="text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
-            >
-              ← Back to Live
-            </Link>
-          </div>
-          {isSignedIn ? (
-            <Link
-              href="/dashboard"
-              className="rounded-lg px-4 py-2 text-sm font-medium transition-colors hover:opacity-80"
-              style={{
-                backgroundColor: "var(--color-surface-raised)",
-                color: "var(--color-text)",
-              }}
-            >
-              Dashboard
-            </Link>
-          ) : (
-            <a
-              href={`${apiBaseUrl}/api/auth/google`}
-              className="rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90"
-              style={{ backgroundColor: "var(--color-google-blue)" }}
-            >
-              Sign In
-            </a>
-          )}
-        </div>
-      </header>
-
       {/* Main content: video + chat side-by-side on desktop */}
       <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-6">
+        {/* Back link + streamer context */}
+        <div className="mb-4">
+          <Link
+            href="/"
+            className="text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
+          >
+            ← Browse streams
+          </Link>
+        </div>
+
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Video + Stream Info column */}
           <div className="flex-1 lg:max-w-[70%] space-y-4">

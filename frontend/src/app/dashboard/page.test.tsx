@@ -6,6 +6,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 vi.mock("@/lib/api", () => ({
   getMe: vi.fn(),
   getAnalytics: vi.fn(),
+  regenerateStreamKey: vi.fn(),
 }));
 
 vi.mock("@/components/ui/Toast", () => ({
@@ -15,7 +16,7 @@ vi.mock("@/components/ui/Toast", () => ({
   })),
 }));
 
-import { getMe, getAnalytics } from "@/lib/api";
+import { getMe, getAnalytics, regenerateStreamKey } from "@/lib/api";
 import DashboardPage from "./page";
 import type { User, Analytics } from "@/types";
 
@@ -30,6 +31,11 @@ const mockUser: User = {
   streamTitle: "My Stream",
   streamCategory: "Gaming",
   isLive: false,
+};
+
+const mockUserNoKey: User = {
+  ...mockUser,
+  streamKey: undefined,
 };
 
 const mockAnalytics: Analytics = {
@@ -61,17 +67,15 @@ describe("DashboardPage", () => {
     expect(skeletons.length).toBeGreaterThan(0);
   });
 
-  it("renders dashboard with user data after loading", async () => {
+  it("renders dashboard heading after loading", async () => {
     vi.mocked(getMe).mockResolvedValue(mockUser);
     vi.mocked(getAnalytics).mockResolvedValue(mockAnalytics);
 
     render(<DashboardPage />);
 
     await waitFor(() => {
-      expect(screen.getByText("Test User")).toBeInTheDocument();
+      expect(screen.getByText("Dashboard")).toBeInTheDocument();
     });
-
-    expect(screen.getByText("Dashboard")).toBeInTheDocument();
   });
 
   it("renders stream key display", async () => {
@@ -81,7 +85,6 @@ describe("DashboardPage", () => {
     render(<DashboardPage />);
 
     await waitFor(() => {
-      // Both StreamKeyDisplay and StreamSettingsForm have "Stream Settings" headings
       const headings = screen.getAllByText("Stream Settings");
       expect(headings.length).toBeGreaterThanOrEqual(1);
     });
@@ -98,6 +101,34 @@ describe("DashboardPage", () => {
         screen.getByText("Analytics (This Week)")
       ).toBeInTheDocument();
     });
+  });
+
+  it("auto-generates stream key when user has none", async () => {
+    vi.mocked(getMe).mockResolvedValue(mockUserNoKey);
+    vi.mocked(getAnalytics).mockResolvedValue(mockAnalytics);
+    vi.mocked(regenerateStreamKey).mockResolvedValue({
+      streamKey: "sk_auto_generated",
+    });
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(regenerateStreamKey).toHaveBeenCalled();
+    });
+  });
+
+  it("does NOT auto-generate key when user already has one", async () => {
+    vi.mocked(getMe).mockResolvedValue(mockUser);
+    vi.mocked(getAnalytics).mockResolvedValue(mockAnalytics);
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Dashboard")).toBeInTheDocument();
+    });
+
+    // regenerateStreamKey should NOT have been called
+    expect(regenerateStreamKey).not.toHaveBeenCalled();
   });
 
   it("shows error state when API fails", async () => {

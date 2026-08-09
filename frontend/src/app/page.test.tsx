@@ -3,132 +3,103 @@ import { render, screen } from "@testing-library/react";
 
 // ── Mocks ──────────────────────────────────────────────────────
 
-const mockRedirect = vi.fn();
-vi.mock("next/navigation", () => ({
-  redirect: (...args: unknown[]) => mockRedirect(...args),
+vi.mock("@/components/LiveGrid", () => ({
+  LiveGrid: ({ streams, total }: { streams: unknown[]; total: number }) => (
+    <div data-testid="live-grid">
+      LiveGrid: {total} stream{total !== 1 ? "s" : ""}
+    </div>
+  ),
 }));
 
-vi.mock("next/headers", () => ({
-  cookies: vi.fn(),
-}));
-
-import { cookies } from "next/headers";
-
-// We need to import the component after mocks are set up
-import LandingPage from "./page";
+import HomePage from "./page";
 
 // ── Helpers ────────────────────────────────────────────────────
 
-function mockTokenCookie(token: string | null) {
-  const get = vi.fn((name: string) => {
-    if (name === "token" && token) {
-      return { value: token, name: "token" };
-    }
-    return undefined;
-  });
-  vi.mocked(cookies).mockResolvedValue({ get } as unknown as Awaited<ReturnType<typeof cookies>>);
+function mockFetch(response: Response | Error) {
+  if (response instanceof Error) {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(response));
+  } else {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
+  }
 }
 
 // ── Tests ──────────────────────────────────────────────────────
 
-describe("LandingPage", () => {
+describe("HomePage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
   });
 
-  it("redirects to /dashboard when token cookie exists", async () => {
-    mockTokenCookie("valid-jwt");
-
-    try {
-      await LandingPage();
-    } catch {
-      // redirect throws in Next.js, but our mock just records the call
-    }
-
-    expect(mockRedirect).toHaveBeenCalledWith("/dashboard");
-  });
-
-  it("renders the hero heading", async () => {
-    mockTokenCookie(null);
-
-    // Mock fetch for live stats
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify([]), { status: 200 })
-      )
+  it("renders the LiveGrid with streams", async () => {
+    const streams = [
+      {
+        userId: "user-1",
+        streamerName: "TestStreamer",
+        streamerAvatarUrl: "https://example.com/avatar.jpg",
+        streamId: "stream-1",
+        title: "Awesome Stream",
+        category: "Gaming",
+        viewerCount: 42,
+        thumbnailUrl: null,
+        startedAt: "2026-01-01T00:00:00Z",
+      },
+    ];
+    mockFetch(
+      new Response(JSON.stringify({ streams, total: 1 }), { status: 200 })
     );
 
-    const jsx = await LandingPage();
+    const jsx = await HomePage();
+    render(jsx);
+
+    expect(screen.getByTestId("live-grid")).toBeInTheDocument();
+    expect(screen.getByText(/1 stream/)).toBeInTheDocument();
+  });
+
+  it("renders empty LiveGrid when no streams", async () => {
+    mockFetch(
+      new Response(JSON.stringify({ streams: [], total: 0 }), { status: 200 })
+    );
+
+    const jsx = await HomePage();
+    render(jsx);
+
+    expect(screen.getByTestId("live-grid")).toBeInTheDocument();
+    expect(screen.getByText(/0 streams/)).toBeInTheDocument();
+  });
+
+  it("handles fetch errors gracefully", async () => {
+    mockFetch(new Error("Network down"));
+
+    const jsx = await HomePage();
+    render(jsx);
+
+    // Should still render LiveGrid with empty state
+    expect(screen.getByTestId("live-grid")).toBeInTheDocument();
+  });
+
+  it("shows hero text when no live streams", async () => {
+    mockFetch(
+      new Response(JSON.stringify({ streams: [], total: 0 }), { status: 200 })
+    );
+
+    const jsx = await HomePage();
     render(jsx);
 
     expect(
       screen.getByText("Stream What You Believe")
     ).toBeInTheDocument();
-  });
-
-  it("renders the Google sign-in link", async () => {
-    mockTokenCookie(null);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify([]), { status: 200 })
-      )
-    );
-
-    const jsx = await LandingPage();
-    render(jsx);
-
     expect(
-      screen.getByText("Start Streaming with Google")
+      screen.getByText(/No censorship. No filters/)
     ).toBeInTheDocument();
   });
 
-  it("renders live stats (0 live now)", async () => {
-    mockTokenCookie(null);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify([]), { status: 200 })
-      )
-    );
+  it("handles array response shape", async () => {
+    mockFetch(new Response(JSON.stringify([]), { status: 200 }));
 
-    const jsx = await LandingPage();
+    const jsx = await HomePage();
     render(jsx);
 
-    expect(screen.getByText(/live now/)).toBeInTheDocument();
-    expect(screen.getByText(/past streams/)).toBeInTheDocument();
-  });
-
-  it("handles fetch errors gracefully (shows 0 live)", async () => {
-    mockTokenCookie(null);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockRejectedValue(new Error("Network down"))
-    );
-
-    const jsx = await LandingPage();
-    render(jsx);
-
-    // Should still render with 0 counts (two "0" elements: liveCount and pastStreamsCount)
-    const zeros = screen.getAllByText("0");
-    expect(zeros.length).toBeGreaterThanOrEqual(2);
-  });
-
-  it("renders the footer", async () => {
-    mockTokenCookie(null);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify([]), { status: 200 })
-      )
-    );
-
-    const jsx = await LandingPage();
-    render(jsx);
-
-    expect(
-      screen.getByText(/Free expression streaming platform/)
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("live-grid")).toBeInTheDocument();
   });
 });

@@ -98,7 +98,7 @@ describe("ChannelPage", () => {
     expect(screen.getByText("Awesome Stream")).toBeInTheDocument();
   });
 
-  it("shows sign-in button when no token", async () => {
+  it("renders browse streams link", async () => {
     mockTokenCookie(null);
     vi.mocked(getChannel).mockResolvedValue(baseChannel);
 
@@ -107,19 +107,7 @@ describe("ChannelPage", () => {
     });
     render(jsx);
 
-    expect(screen.getByText("Sign In")).toBeInTheDocument();
-  });
-
-  it("shows Dashboard link when signed in", async () => {
-    mockTokenCookie("valid-jwt");
-    vi.mocked(getChannel).mockResolvedValue(baseChannel);
-
-    const jsx = await ChannelPage({
-      params: Promise.resolve({ id: "user-1" }),
-    });
-    render(jsx);
-
-    expect(screen.getByText("Dashboard")).toBeInTheDocument();
+    expect(screen.getByText("← Browse streams")).toBeInTheDocument();
   });
 
   it("calls notFound when channel returns 404", async () => {
