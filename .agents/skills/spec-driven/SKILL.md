@@ -312,34 +312,48 @@ After the PR is created, poll GitHub Checks with a timeout:
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
-PR=$1
+PR="$1"
 TIMEOUT=600   # 10 minutes
 INTERVAL=15   # seconds
 ELAPSED=0
 
-while [ $ELAPSED -lt $TIMEOUT ]; do
-    # Count checks that are not SUCCESS or SKIPPED
-    PENDING=$(gh pr checks "$PR" --json state --jq '[.[] | select(.state != "SUCCESS" and .state != "SKIPPED")] | length')
-    if [ "$PENDING" -eq 0 ]; then
-        echo "[CI_PASS]"
-        exit 0
-    fi
-    # If any check has state FAILURE, exit early
-    FAILURES=$(gh pr checks "$PR" --json state --jq '[.[] | select(.state == "FAILURE")] | length')
-    if [ "$FAILURES" -gt 0 ]; then
+log() { echo "[poll-ci $(date +%H:%M:%S)] $*"; }
+
+while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
+    JSON=$(gh pr checks "$PR" --json state 2>/dev/null || echo '[]')
+    PENDING=$(echo "$JSON" | jq '[.[] | select(.state != "SUCCESS" and .state != "SKIPPED")] | length' 2>/dev/null || echo 0)
+    PENDING=${PENDING:-0}
+    FAILURES=$(echo "$JSON" | jq '[.[] | select(.state == "FAILURE")] | length' 2>/dev/null || echo 0)
+    FAILURES=${FAILURES:-0}
+    TOTAL=$(echo "$JSON" | jq 'length' 2>/dev/null || echo 0)
+    TOTAL=${TOTAL:-0}
+
+    if [ "$TOTAL" -eq 0 ]; then
+        log "no checks found yet (elapsed ${ELAPSED}s)"
+    elif [ "$FAILURES" -gt 0 ]; then
+        log "${FAILURES} of ${TOTAL} checks FAILED"
         echo "[CI_FAIL]"
         exit 1
+    elif [ "$PENDING" -eq 0 ]; then
+        log "all ${TOTAL} checks passed"
+        echo "[CI_PASS]"
+        exit 0
+    else
+        log "${PENDING} of ${TOTAL} checks pending (elapsed ${ELAPSED}s)"
     fi
-    sleep $INTERVAL
+
+    sleep "$INTERVAL"
     ELAPSED=$((ELAPSED + INTERVAL))
 done
 
+log "timed out after ${TIMEOUT}s"
 echo "[CI_TIMEOUT]"
 exit 2
 ```
 
-Store this script as `/tmp/poll-ci.sh`, make it executable, and invoke
-it with the PR number.
+Store this script, make it executable (chmod +x), and invoke it with
+the PR number. The log function prints timestamped lines so you can
+see progress during the poll.
 
 - If `[CI_PASS]` → go to Phase 4.
 - If `[CI_FAIL]` → examine the failed checks, fix the code (switch back
