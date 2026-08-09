@@ -87,7 +87,7 @@ jobs:
       - name: run migrations
         run: migrate -path db/migrations -database "$DATABASE_URL" up
       - name: go test (integration)
-        run: go test -run Integration -count=1 ./...
+        run: go test -count=1 ./...
 
   # ── Migration Check ─────────────────────────────────────────────────
   migration-check:
