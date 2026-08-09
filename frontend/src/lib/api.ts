@@ -78,7 +78,6 @@ import type {
   StreamSettings,
   Analytics,
   StreamEndResponse,
-  LiveStream,
   LiveStreamsResponse,
   ChannelResponse,
   ChatMessagesResponse,

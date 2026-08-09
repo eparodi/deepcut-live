@@ -1,5 +1,3 @@
-import Link from "next/link";
-
 export default function ChannelLoading() {
   return (
     <div className="min-h-full flex flex-col">
