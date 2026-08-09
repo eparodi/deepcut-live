@@ -94,15 +94,7 @@ func (s *StreamService) OnStreamEnd(ctx context.Context, srsClientID int, hlsPat
 
 	// Update analytics
 	date := time.Now().Format("2006-01-02")
-	peak := stream.PeakViewers
-	unique := stream.TotalViewers
-	if peak == 0 {
-		peak = 1
-	}
-	if unique == 0 {
-		unique = 1
-	}
-	if err := s.repo.UpdateStreamAnalytics(ctx, stream.UserID, date, durationSeconds, peak, unique); err != nil {
+	if err := s.repo.UpdateStreamAnalytics(ctx, stream.UserID, date, durationSeconds, stream.PeakViewers, stream.TotalViewers); err != nil {
 		slog.Error("failed to update stream analytics", "err", err, "stream_id", stream.ID)
 	}
 
@@ -201,15 +193,7 @@ func (s *StreamService) ForceEndStream(ctx context.Context, userID string) (stri
 
 	// Update analytics (same pattern as OnStreamEnd).
 	date := time.Now().Format("2006-01-02")
-	peak := stream.PeakViewers
-	unique := stream.TotalViewers
-	if peak == 0 {
-		peak = 1
-	}
-	if unique == 0 {
-		unique = 1
-	}
-	if err := s.repo.UpdateStreamAnalytics(ctx, userID, date, duration, peak, unique); err != nil {
+	if err := s.repo.UpdateStreamAnalytics(ctx, userID, date, duration, stream.PeakViewers, stream.TotalViewers); err != nil {
 		slog.Error("failed to update stream analytics", "err", err, "user_id", userID)
 	}
 
