@@ -373,18 +373,43 @@ see progress during the poll.
 4. If the review is clean or only has minor/optional notes:
    - Output `[REVIEW_PASS]` and proceed.
 
-### Phase 5 — QA
+### Phase 5 — QA + Security (parallel)
+
+QA and Security Engineer run simultaneously. Both must pass before
+proceeding.
+
+#### 5a — QA
 
 1. Load `.agents/skills/qa/SKILL.md`.
 2. Execute the QA plan (run tests, verify contracts, inspect UI).
 3. Post the QA report as a PR comment.
 4. If `[QA_FAIL]` → switch to the responsible engineer, fix issues,
    push, then loop back to Phase 3.
-5. If `[QA_PASS]` → proceed.
+5. If `[QA_PASS]` → proceed to gate.
+
+#### 5b — Security Engineer
+
+1. Load `.agents/skills/security-engineer/SKILL.md`.
+2. Execute the security audit (static analysis, auth review, input
+   validation, API security, dependency audit).
+3. If the app is running locally, perform runtime reconnaissance and
+   penetration testing.
+4. Post the security report as a PR comment.
+5. If `[SECURITY_FAIL]` → switch to the responsible engineer, fix
+   every critical and high issue, push, then loop back to Phase 3.
+6. If `[SECURITY_PASS]` → proceed to gate.
+
+#### Parallel Gate
+
+- Both QA and Security must output `[QA_PASS]` and `[SECURITY_PASS]`.
+- If either fails, the orchestrator fixes issues and loops back.
+- If only medium/low items remain, the Security Engineer may output
+  `[SECURITY_PASS]` with a note to track those as tech-debt.
 
 ### Phase 6 — Ready for User
 
-When CI ✅, Reviewer ✅, QA ✅, output the following final message:
+When CI ✅, Reviewer ✅, QA ✅, Security ✅, output the following final
+message:
 
 ```
 🚦 All gates passed.
@@ -396,6 +421,7 @@ Branch: feat/<slug>
 - CI:       ✅
 - Reviewer: ✅
 - QA:       ✅
+- Security: ✅
 
 Ready for your final review. Merge when satisfied.
 ```
