@@ -12,7 +12,7 @@ import (
 )
 
 const getUser = `-- name: GetUser :one
-SELECT id, google_id, email, name, avatar_url, stream_key_hash, stream_title, stream_category, is_live, live_since, created_at, updated_at FROM users WHERE id = $1
+SELECT id, google_id, email, name, avatar_url, stream_key_hash, stream_title, stream_category, is_live, live_since, created_at, updated_at, stream_key FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUser(ctx context.Context, id pgtype.UUID) (User, error) {
@@ -31,6 +31,7 @@ func (q *Queries) GetUser(ctx context.Context, id pgtype.UUID) (User, error) {
 		&i.LiveSince,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.StreamKey,
 	)
 	return i, err
 }

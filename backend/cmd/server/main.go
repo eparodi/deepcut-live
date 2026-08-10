@@ -82,7 +82,7 @@ func main() {
 	authHandler := authhttp.NewAuthHandler(authSvc, streamSvc, baseURL, logger)
 	streamHandler := streamhttp.NewStreamHandler(streamSvc, streamHub, logger)
 	vodHandler := vodhttp.NewVODHandler(vodSvc, logger)
-	chatHandler := chathttp.NewChatHandler(chatSvc, logger)
+	chatHandler := chathttp.NewChatHandler(chatSvc, newChatAuthAdapter(authSvc), logger)
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -107,11 +107,12 @@ func main() {
 	vodHandler.RegisterRoutes(r)
 	chatHandler.RegisterRoutes(r)
 
-	// Authenticated WebSocket endpoints.
+	// WebSocket endpoints (chat WS handles auth internally — auth optional).
+	r.Get("/ws/chat/{streamID}", chatHandler.ChatWebSocket)
+
 	r.Group(func(r chi.Router) {
 		r.Use(authHandler.AuthMiddleware)
 		r.Get("/api/streams/ws", streamHandler.StreamWebSocket)
-		r.Get("/api/chat/ws/{streamID}", chatHandler.ChatWebSocket)
 	})
 
 	// Background poller: queries SRS API for active streams.
@@ -192,4 +193,29 @@ func env(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// chatAuthAdapter adapts the auth service to the chat module's chatAuth interface.
+type chatAuthAdapter struct {
+	authSvc *authapp.AuthService
+}
+
+func newChatAuthAdapter(authSvc *authapp.AuthService) *chatAuthAdapter {
+	return &chatAuthAdapter{authSvc: authSvc}
+}
+
+func (a *chatAuthAdapter) ValidateToken(ctx context.Context, tokenStr string) (userID, userName, userAvatarUrl string, err error) {
+	userID, err = a.authSvc.ValidateJWT(tokenStr)
+	if err != nil {
+		return "", "", "", err
+	}
+	user, err := a.authSvc.GetByID(ctx, userID)
+	if err != nil {
+		return "", "", "", err
+	}
+	avatar := ""
+	if user.AvatarURL != nil {
+		avatar = *user.AvatarURL
+	}
+	return userID, user.Name, avatar, nil
 }

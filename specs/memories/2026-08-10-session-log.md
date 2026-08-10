@@ -1,20 +1,31 @@
-# 2026-08-10 Session Log
+# Session Log — 2026-08-10
 
-## Session: Reduce SRS log noise in Docker console
+## Corrections & Root Causes
 
-### Corrections & Learnings
+| # | Issue | Root Cause | Fix |
+|---|-------|-----------|-----|
+| 1 | WS integration test hanging | `readPump` concurrent writes with `writePump` | Routed all writes through `client.Send` channel via `sendToClient()` |
+| 2 | WS integration test failing (client.UserID empty) | WS route moved out of auth group; test didn't pass auth | Added `HTTPHeader` with Cookie to `websocket.DialOptions` |
+| 3 | Server test build failure | `chathttp.NewChatHandler` signature changed | Added `chatAuthAdapter` to server test |
+| 4 | `nil` logger panic in handler test | Test passed `nil`; error path called `h.logger.Error()` | Used `testLogger()` instead of `nil` |
+| 5 | Chat panel never rendered | Backend never returned `streamId` in channel response | Added `StreamID` to `ChannelInfo`, repo query, and population |
+| 6 | WebSocket connection failed | `getWsUrl` used Next.js proxy (port 3000); cant proxy WS | Added separate `WS_HOST` pointing to backend directly |
+| 7 | Stream offline → infinite reconnect | HTTP 400 returned before WS upgrade; browser got no close code | Accept WS first, then close with code 4001 |
+| 8 | Messages appearing twice | React StrictMode double-invoke re-receives `sendInitialBatch` | Dedup by message ID in `onmessage` |
+| 9 | Sending messages twice | `<button>` without type defaults to submit; Enter fires both handlers | Added `type="button"` |
+| 10 | CI: Auth repo integration tests failing | Pre-existing: `CreateUser` param order mismatch after #18 | Reordered all 10 seed calls |
+| 11 | CI: Chat repo cursor test failing | Messages inserted in same microsecond; second-precision cursor filters all | Added 10ms sleeps + `RFC3339Nano` format |
+| 12 | CI: sqlc generate failing | Pre-existing: `stream_key` column added without regenerating sqlc output | Ran `sqlc generate` |
 
-| # | Event | Root Cause | Fix |
-|---|-------|------------|-----|
-| 1 | SRS poller logged WARN every 5s when SRS unreachable | Poller used global `slog.Warn` without respecting a configured log level | Demoted to DEBUG via instance logger; added LOG_LEVEL env var |
-| 2 | Poller used global `slog` package while rest of codebase uses injected `*slog.Logger` | Pattern inconsistency — StreamService lacked a logger field | Added `*slog.Logger` field to StreamService, updated constructor, added nil-safe log helpers |
+## Questions / Follow-Ups
 
-### Rules to Add/Update
+- [ ] Extract `chatAuthAdapter` to shared package (deferred: Go visibility constraint)
+- [ ] Make origin patterns configurable via env var
+- [ ] Simplify whitespace check with `strings.TrimSpace`
+- [ ] Consider per-client deadline timer instead of O(n) `ExpireIdle` scan
 
-- ⬜ go-chi skill: add rule about services always using injected loggers, never global slog
-- ⬜ AGENTS.md: add LOG_LEVEL env var as a standard pattern
-- ⬜ docker-compose: add log rotation as a standard for all services
+## Related Retros
 
-### Follow-ups
-
-- [ ] Consolidate remaining global `slog.Error` calls in `service.go` (lines 113, 220) — `OnStreamEnd` and `ForceEndStream` still use global slog for analytics errors
+- [2026-08-10-chat-review.md](./2026-08-10-chat-review.md)
+- [2026-08-10-chat-retro.md](./2026-08-10-chat-retro.md)
+- [2026-08-10-nextjs-websocket-proxy.md](./2026-08-10-nextjs-websocket-proxy.md)

@@ -17,8 +17,9 @@ import (
 // ---------------------------------------------------------------------------
 
 type mockChatRepo struct {
-	saveMessageFn func(ctx context.Context, streamID, userID, message string) (*domain.ChatMessage, error)
-	getMessagesFn func(ctx context.Context, streamID string, limit, offset int) ([]domain.ChatMessage, error)
+	saveMessageFn     func(ctx context.Context, streamID, userID, message string) (*domain.ChatMessage, error)
+	getMessagesFn     func(ctx context.Context, streamID string, before string, limit int) ([]domain.ChatMessage, bool, error)
+	getStreamStatusFn func(ctx context.Context, streamID string) (bool, error)
 }
 
 func (m *mockChatRepo) SaveMessage(ctx context.Context, streamID, userID, message string) (*domain.ChatMessage, error) {
@@ -34,13 +35,20 @@ func (m *mockChatRepo) SaveMessage(ctx context.Context, streamID, userID, messag
 	}, nil
 }
 
-func (m *mockChatRepo) GetMessages(ctx context.Context, streamID string, limit, offset int) ([]domain.ChatMessage, error) {
+func (m *mockChatRepo) GetMessages(ctx context.Context, streamID string, before string, limit int) ([]domain.ChatMessage, bool, error) {
 	if m.getMessagesFn != nil {
-		return m.getMessagesFn(ctx, streamID, limit, offset)
+		return m.getMessagesFn(ctx, streamID, before, limit)
 	}
 	return []domain.ChatMessage{
-		{ID: "msg-1", StreamID: streamID, UserID: "user-1", UserName: "Alice", Message: "hello", SentAt: time.Now()},
-	}, nil
+		{ID: "msg-1", StreamID: streamID, UserID: "user-1", UserName: "Alice", UserAvatarUrl: "https://example.com/avatar.jpg", Message: "hello", SentAt: time.Now()},
+	}, false, nil
+}
+
+func (m *mockChatRepo) GetStreamStatus(ctx context.Context, streamID string) (bool, error) {
+	if m.getStreamStatusFn != nil {
+		return m.getStreamStatusFn(ctx, streamID)
+	}
+	return true, nil
 }
 
 func testLogger() *slog.Logger {
@@ -125,12 +133,13 @@ func TestChatHubBroadcast(t *testing.T) {
 	hub.Join("stream-1", client)
 
 	msg := &domain.ChatMessage{
-		ID:       "msg-1",
-		StreamID: "stream-1",
-		UserID:   "user-2",
-		UserName: "Bob",
-		Message:  "hello everyone!",
-		SentAt:   time.Now(),
+		ID:            "msg-1",
+		StreamID:      "stream-1",
+		UserID:        "user-2",
+		UserName:      "Bob",
+		UserAvatarUrl: "https://example.com/bob.jpg",
+		Message:       "hello everyone!",
+		SentAt:        time.Now(),
 	}
 
 	hub.Broadcast("stream-1", msg)
@@ -171,32 +180,64 @@ func TestChatHubBroadcastEmptyRoom(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// TestRateLimiting
+// ---------------------------------------------------------------------------
+
+func TestRateLimiting(t *testing.T) {
+	hub := NewChatHub(&mockChatRepo{}, testLogger())
+
+	// Should allow burst of 3.
+	if !hub.AllowMessage("user-1") {
+		t.Fatal("expected first message to be allowed")
+	}
+	if !hub.AllowMessage("user-1") {
+		t.Fatal("expected second message to be allowed")
+	}
+	if !hub.AllowMessage("user-1") {
+		t.Fatal("expected third message (burst) to be allowed")
+	}
+
+	// Fourth should be rate-limited.
+	if hub.AllowMessage("user-1") {
+		t.Fatal("expected fourth message to be rate-limited")
+	}
+
+	// Anonymous users are always rate-limited.
+	if hub.AllowMessage("") {
+		t.Fatal("expected empty userID to be rate-limited")
+	}
+}
+
+// ---------------------------------------------------------------------------
 // TestSendMessage
 // ---------------------------------------------------------------------------
 
 func TestSendMessage(t *testing.T) {
 	tests := []struct {
-		name      string
-		streamID  string
-		userID    string
-		userName  string
-		message   string
-		setupMock func(*mockChatRepo)
-		wantErr   bool
+		name          string
+		streamID      string
+		userID        string
+		userName      string
+		userAvatarUrl string
+		message       string
+		setupMock     func(*mockChatRepo)
+		wantErr       bool
 	}{
 		{
-			name:     "happy path — saves and broadcasts",
-			streamID: "stream-1",
-			userID:   "user-1",
-			userName: "Alice",
-			message:  "Hello world!",
+			name:          "happy path — saves and broadcasts",
+			streamID:      "stream-1",
+			userID:        "user-1",
+			userName:      "Alice",
+			userAvatarUrl: "https://example.com/alice.jpg",
+			message:       "Hello world!",
 		},
 		{
-			name:     "happy path — empty message",
-			streamID: "stream-1",
-			userID:   "user-1",
-			userName: "Alice",
-			message:  "",
+			name:          "happy path — empty message (passes through)",
+			streamID:      "stream-1",
+			userID:        "user-1",
+			userName:      "Alice",
+			userAvatarUrl: "",
+			message:       "",
 		},
 		{
 			name:     "error — save fails",
@@ -222,7 +263,7 @@ func TestSendMessage(t *testing.T) {
 			hub := NewChatHub(repo, testLogger())
 			svc := NewChatService(repo, hub)
 
-			msg, err := svc.SendMessage(context.Background(), tt.streamID, tt.userID, tt.userName, tt.message)
+			msg, err := svc.SendMessage(context.Background(), tt.streamID, tt.userID, tt.userName, tt.userAvatarUrl, tt.message)
 			if tt.wantErr && err == nil {
 				t.Fatal("expected error, got nil")
 			}
@@ -249,10 +290,11 @@ func TestGetMessages(t *testing.T) {
 	tests := []struct {
 		name      string
 		streamID  string
+		before    string
 		limit     int
-		offset    int
 		setupMock func(*mockChatRepo)
 		wantCount int
+		wantMore  bool
 		wantErr   bool
 	}{
 		{
@@ -267,25 +309,39 @@ func TestGetMessages(t *testing.T) {
 			limit:     50,
 			wantCount: 0,
 			setupMock: func(m *mockChatRepo) {
-				m.getMessagesFn = func(ctx context.Context, streamID string, limit, offset int) ([]domain.ChatMessage, error) {
-					return []domain.ChatMessage{}, nil
+				m.getMessagesFn = func(ctx context.Context, streamID string, before string, limit int) ([]domain.ChatMessage, bool, error) {
+					return []domain.ChatMessage{}, false, nil
 				}
 			},
 		},
 		{
-			name:      "happy path — pagination with limit and offset",
+			name:      "happy path — cursor-based pagination",
 			streamID:  "stream-1",
+			before:    "2026-01-01T00:00:00Z",
 			limit:     10,
-			offset:    20,
 			wantCount: 1,
 		},
 		{
-			name:     "error — not found (returns empty)",
+			name:      "happy path — hasMore true",
+			streamID:  "stream-1",
+			limit:     1,
+			wantCount: 1,
+			wantMore:  true,
+			setupMock: func(m *mockChatRepo) {
+				m.getMessagesFn = func(ctx context.Context, streamID string, before string, limit int) ([]domain.ChatMessage, bool, error) {
+					return []domain.ChatMessage{
+						{ID: "msg-1"},
+					}, true, nil
+				}
+			},
+		},
+		{
+			name:     "error — not found",
 			streamID: "stream-999",
 			limit:    50,
 			setupMock: func(m *mockChatRepo) {
-				m.getMessagesFn = func(ctx context.Context, streamID string, limit, offset int) ([]domain.ChatMessage, error) {
-					return nil, errs.NotFound("not found")
+				m.getMessagesFn = func(ctx context.Context, streamID string, before string, limit int) ([]domain.ChatMessage, bool, error) {
+					return nil, false, errs.NotFound("not found")
 				}
 			},
 			wantErr: true,
@@ -295,8 +351,8 @@ func TestGetMessages(t *testing.T) {
 			streamID: "stream-1",
 			limit:    50,
 			setupMock: func(m *mockChatRepo) {
-				m.getMessagesFn = func(ctx context.Context, streamID string, limit, offset int) ([]domain.ChatMessage, error) {
-					return nil, errors.New("db error")
+				m.getMessagesFn = func(ctx context.Context, streamID string, before string, limit int) ([]domain.ChatMessage, bool, error) {
+					return nil, false, errors.New("db error")
 				}
 			},
 			wantErr: true,
@@ -312,15 +368,20 @@ func TestGetMessages(t *testing.T) {
 			hub := NewChatHub(repo, testLogger())
 			svc := NewChatService(repo, hub)
 
-			msgs, err := svc.GetMessages(context.Background(), tt.streamID, tt.limit, tt.offset)
+			msgs, hasMore, err := svc.GetMessages(context.Background(), tt.streamID, tt.before, tt.limit)
 			if tt.wantErr && err == nil {
 				t.Fatal("expected error, got nil")
 			}
 			if !tt.wantErr && err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if !tt.wantErr && len(msgs) != tt.wantCount {
-				t.Fatalf("got %d messages, want %d", len(msgs), tt.wantCount)
+			if !tt.wantErr {
+				if len(msgs) != tt.wantCount {
+					t.Fatalf("got %d messages, want %d", len(msgs), tt.wantCount)
+				}
+				if hasMore != tt.wantMore {
+					t.Fatalf("got hasMore=%v, want %v", hasMore, tt.wantMore)
+				}
 			}
 		})
 	}

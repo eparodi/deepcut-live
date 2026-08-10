@@ -174,6 +174,7 @@ export function ChatInput({
         </div>
 
         <button
+          type="button"
           onClick={handleSend}
           disabled={isDisabled || message.trim().length === 0}
           className="shrink-0 rounded-lg px-4 py-2 text-sm font-semibold text-white transition-colors hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"

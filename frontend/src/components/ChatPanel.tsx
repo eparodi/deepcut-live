@@ -20,14 +20,17 @@ interface ChatPanelProps {
   initialMessages?: ChatMessage[];
 }
 
-const API_HOST = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081";
+	// API_HOST is the Next.js proxy (for REST calls). WebSocket must go directly
+	// to the backend because Next.js middleware doesn't support WS upgrades.
+	const API_HOST = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081";
+	const WS_HOST = process.env.NEXT_PUBLIC_WS_URL || "http://localhost:8081";
 
-/** Convert HTTP URL to WebSocket URL */
-function getWsUrl(streamId: string): string {
-  const url = new URL(API_HOST);
-  const protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${url.host}/ws/chat/${streamId}`;
-}
+	/** Convert HTTP URL to WebSocket URL — always points to the backend directly */
+	function getWsUrl(streamId: string): string {
+	  const url = new URL(WS_HOST);
+	  const protocol = url.protocol === "https:" ? "wss:" : "ws:";
+	  return `${protocol}//${url.host}/ws/chat/${streamId}`;
+	}
 
 /** Format a timestamp for display */
 function formatTime(iso: string): string {
@@ -103,10 +106,17 @@ export function ChatPanel({
       try {
         const data = JSON.parse(event.data);
 
-        switch (data.type) {
-          case "message":
-            setMessages((prev) => [...prev, data.payload as ChatMessage]);
-            break;
+	        switch (data.type) {
+	          case "message":
+	            setMessages((prev) => {
+	              const msg = data.payload as ChatMessage;
+	              // Deduplicate: React StrictMode double-invokes the effect,
+	              // causing sendInitialBatch to fire twice. Skip if we already
+	              // have this message ID in the array.
+	              if (prev.some((m) => m.id === msg.id)) return prev;
+	              return [...prev, msg];
+	            });
+	            break;
           case "error":
             if (data.payload?.code === "rate_limited") {
               setIsRateLimited(true);
