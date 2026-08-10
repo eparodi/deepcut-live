@@ -88,18 +88,22 @@ func (h *ChatHandler) ChatWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate stream exists and is live.
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-	defer cancel()
-	isLive, err := h.svc.IsStreamLive(ctx, streamID)
+	// Accept the WebSocket connection FIRST so the browser can receive close codes.
+	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		OriginPatterns: []string{"localhost:3000", "localhost:8081", "127.0.0.1:3000", "127.0.0.1:8081"},
+	})
 	if err != nil {
-		h.logger.Error("check stream status", "stream_id", streamID, "error", err)
-		render.Error(w, r, errs.NotFound("stream not found"))
+		h.logger.Error("websocket accept", "error", err)
 		return
 	}
-	if !isLive {
-		// Stream exists but is not live — reject with spec close code.
-		render.Error(w, r, errs.BadRequest("stream is not live"))
+	defer conn.Close(websocket.StatusNormalClosure, "")
+
+	// Validate stream exists and is live (AFTER upgrade so client gets close code).
+	subCtx, subCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer subCancel()
+	isLive, err := h.svc.IsStreamLive(subCtx, streamID)
+	if err != nil || !isLive {
+		conn.Close(websocket.StatusCode(4001), "stream offline")
 		return
 	}
 
@@ -107,22 +111,13 @@ func (h *ChatHandler) ChatWebSocket(w http.ResponseWriter, r *http.Request) {
 	var userID, userName, userAvatarUrl string
 	tokenStr := extractToken(r)
 	if tokenStr != "" {
-		if uid, name, avatar, err := h.auth.ValidateToken(r.Context(), tokenStr); err == nil {
+		if uid, name, avatar, err := h.auth.ValidateToken(subCtx, tokenStr); err == nil {
 			userID = uid
 			userName = name
 			userAvatarUrl = avatar
 		}
 		// Invalid/expired token is not an error — proceed as anonymous.
 	}
-
-	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		OriginPatterns: []string{"localhost:3000", "localhost:8081"},
-	})
-	if err != nil {
-		h.logger.Error("websocket accept", "error", err)
-		return
-	}
-	defer conn.Close(websocket.StatusNormalClosure, "")
 
 	client := &domain.ChatClient{
 		UserID:        userID,
@@ -136,7 +131,7 @@ func (h *ChatHandler) ChatWebSocket(w http.ResponseWriter, r *http.Request) {
 	defer h.hub.Leave(streamID, client)
 
 	// Send initial batch of recent messages.
-	h.sendInitialBatch(ctx, conn, streamID)
+	h.sendInitialBatch(subCtx, conn, streamID)
 
 	// Background goroutines for read/write with idle tracking.
 	connCtx, connCancel := context.WithCancel(context.Background())
