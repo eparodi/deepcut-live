@@ -156,6 +156,7 @@ func (r *StreamRepo) GetChannelInfo(ctx context.Context, userID string) (*domain
 		SELECT u.id, u.name, u.avatar_url,
 		       u.stream_title, u.stream_category,
 		       u.is_live, u.live_since,
+		       COALESCE(s.id::text, ''),
 		       COALESCE(s.hls_path, ''),
 		       COALESCE(vc.viewer_count, 0)
 		FROM users u
@@ -169,11 +170,12 @@ func (r *StreamRepo) GetChannelInfo(ctx context.Context, userID string) (*domain
 
 	var info domain.ChannelInfo
 	var liveSince *time.Time
+	var streamID string
 	var hlsPath string
 	err := r.pool.QueryRow(ctx, query, userID).Scan(
 		&info.UserID, &info.UserName, &info.UserAvatar,
 		&info.StreamTitle, &info.StreamCategory,
-		&info.IsLive, &liveSince, &hlsPath, &info.ViewerCount,
+		&info.IsLive, &liveSince, &streamID, &hlsPath, &info.ViewerCount,
 	)
 	if err == pgx.ErrNoRows {
 		return nil, errs.NotFound("user %s not found", userID)
@@ -187,6 +189,9 @@ func (r *StreamRepo) GetChannelInfo(ctx context.Context, userID string) (*domain
 	}
 	if hlsPath != "" {
 		info.HlsPath = &hlsPath
+	}
+	if streamID != "" {
+		info.StreamID = &streamID
 	}
 	return &info, nil
 }

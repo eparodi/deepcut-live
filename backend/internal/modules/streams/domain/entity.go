@@ -45,6 +45,7 @@ type ChannelInfo struct {
 	StreamTitle    *string `json:"streamTitle"`
 	StreamCategory *string `json:"streamCategory"`
 	IsLive         bool    `json:"isLive"`
+	StreamID       *string `json:"streamId"`
 	StartedAt      *string `json:"startedAt,omitempty"`
 	HlsPath        *string `json:"thumbnailUrl,omitempty"`
 	ViewerCount    int     `json:"viewerCount"`
