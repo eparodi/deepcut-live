@@ -19,6 +19,7 @@ interface VideoPlayerProps {
   isLive: boolean;
   vodId?: string;
   viewerCount?: number;
+  onTheaterChange?: (active: boolean) => void;
 }
 
 // ---- Inline SVG Icons ----
@@ -97,7 +98,7 @@ function formatViewerCount(n: number): string {
 
 // ---- Main Component ----
 
-export function VideoPlayer({ hlsUrl, isLive, vodId, viewerCount = 0 }: VideoPlayerProps) {
+export function VideoPlayer({ hlsUrl, isLive, vodId, viewerCount = 0, onTheaterChange }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -261,10 +262,11 @@ export function VideoPlayer({ hlsUrl, isLive, vodId, viewerCount = 0 }: VideoPla
     } else {
       document.body.style.backgroundColor = "";
     }
+    onTheaterChange?.(isTheaterMode);
     return () => {
       document.body.style.backgroundColor = "";
     };
-  }, [isTheaterMode]);
+  }, [isTheaterMode, onTheaterChange]);
 
   // ---- Player actions ----
 
@@ -513,6 +515,7 @@ export function VideoPlayer({ hlsUrl, isLive, vodId, viewerCount = 0 }: VideoPla
             <div className="absolute inset-0 flex items-center justify-center z-10">
               <button
                 onClick={(e) => { e.stopPropagation(); togglePlay(); }}
+                onDoubleClick={(e) => e.stopPropagation()}
                 className="w-16 h-16 flex items-center justify-center rounded-full transition-opacity hover:opacity-90"
                 style={{ backgroundColor: "rgba(0,0,0,0.5)", color: "var(--color-text)" }}
                 aria-label="Play"
@@ -536,6 +539,7 @@ export function VideoPlayer({ hlsUrl, isLive, vodId, viewerCount = 0 }: VideoPla
               {/* Play/Pause */}
               <button
                 onClick={(e) => { e.stopPropagation(); togglePlay(); }}
+                onDoubleClick={(e) => e.stopPropagation()}
                 className="p-2 rounded transition-colors hover:text-white"
                 style={{ color: "var(--color-text)" }}
                 aria-label={isPlaying ? "Pause" : "Play"}
@@ -547,6 +551,7 @@ export function VideoPlayer({ hlsUrl, isLive, vodId, viewerCount = 0 }: VideoPla
               <div className="flex items-center gap-1 group/vol">
                 <button
                   onClick={(e) => { e.stopPropagation(); toggleMute(); }}
+                  onDoubleClick={(e) => e.stopPropagation()}
                   className="p-2 rounded transition-colors hover:text-white"
                   style={{ color: "var(--color-text)" }}
                   aria-label={isMuted || volume === 0 ? "Unmute" : "Mute"}
@@ -589,6 +594,7 @@ export function VideoPlayer({ hlsUrl, isLive, vodId, viewerCount = 0 }: VideoPla
               {/* Theater mode */}
               <button
                 onClick={(e) => { e.stopPropagation(); toggleTheater(); }}
+                onDoubleClick={(e) => e.stopPropagation()}
                 className="hidden sm:flex p-2 rounded transition-colors hover:text-white"
                 style={{ color: isTheaterMode ? "var(--color-primary)" : "var(--color-text)" }}
                 aria-label={isTheaterMode ? "Exit theater mode" : "Theater mode"}
@@ -600,6 +606,7 @@ export function VideoPlayer({ hlsUrl, isLive, vodId, viewerCount = 0 }: VideoPla
               {/* Fullscreen */}
               <button
                 onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }}
+                onDoubleClick={(e) => e.stopPropagation()}
                 className="p-2 rounded transition-colors hover:text-white"
                 style={{ color: "var(--color-text)" }}
                 aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}

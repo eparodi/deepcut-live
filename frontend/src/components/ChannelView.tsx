@@ -16,6 +16,7 @@ interface Props {
 
 export function ChannelView({ id, initialChannel, isSignedIn }: Props) {
   const [channel, setChannel] = useState(initialChannel);
+  const [isTheaterMode, setIsTheaterMode] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(async () => {
@@ -44,10 +45,15 @@ export function ChannelView({ id, initialChannel, isSignedIn }: Props) {
           </Link>
         </div>
 
-        <div className="flex flex-col lg:flex-row gap-6">
-          <div className="flex-1 lg:max-w-[70%] space-y-4">
+        <div className={`flex flex-col gap-6 ${isTheaterMode ? "" : "lg:flex-row"}`}>
+          <div className={`flex-1 space-y-4 ${isTheaterMode ? "" : "lg:max-w-[70%]"}`}>
             {hlsUrl ? (
-              <VideoPlayer hlsUrl={hlsUrl} isLive={channel.isLive} viewerCount={channel.viewerCount} />
+              <VideoPlayer
+                hlsUrl={hlsUrl}
+                isLive={channel.isLive}
+                viewerCount={channel.viewerCount}
+                onTheaterChange={setIsTheaterMode}
+              />
             ) : (
               <div
                 className="w-full aspect-video rounded-xl flex items-center justify-center"
@@ -83,8 +89,8 @@ export function ChannelView({ id, initialChannel, isSignedIn }: Props) {
           </div>
 
           <aside
-            className="hidden lg:flex lg:flex-col lg:w-[30%] lg:min-w-[300px]"
-            style={{ minHeight: "500px" }}
+            className={`hidden lg:flex lg:flex-col ${isTheaterMode ? "lg:w-full" : "lg:w-[30%] lg:min-w-[300px]"}`}
+            style={{ minHeight: isTheaterMode ? "300px" : "500px" }}
           >
             {channel.streamId ? (
               <ChatPanel
