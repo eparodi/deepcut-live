@@ -19,6 +19,9 @@
 | 13 | Nil hub panic in service tests | `StreamService.hub` accessed without nil check | Added `if s.hub != nil` guards | All service dependencies that may be nil in tests need nil checks |
 | 14 | Poller silently discards errors | Copy-paste convenience, no logging | Added `slog.Warn`/`slog.Error` for all error paths | Per go-chi skill: "No bare error discards" |
 | 15 | Test compilation failures after signature change | `CreateStream` signature changed but mocks not updated | Updated all mock structs and call sites | Verify call sites before committing signature changes |
+| 16 | Theater mode button made player full viewport | Used `!w-screen` which forces 100vw | Changed to `!max-w-full` + lifted theater state to ChannelView for grid restack | Component-local CSS should not override page layout; lift state to parent |
+| 17 | Theater button double-click triggered fullscreen | Control buttons only blocked `onClick` propagation, not `onDoubleClick` | Added `onDoubleClick={(e) => e.stopPropagation()}` to all control buttons | Interactive controls inside clickable containers must stop both onClick and onDoubleClick propagation |
+| 18 | Unused `fireEvent` import in test | Imported but not used after test rewrite | Removed unused import | Already caught by eslint `no-unused-vars`; no rule change needed |
 
 ## Follow-ups
 
