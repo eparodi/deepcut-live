@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"time"
 )
@@ -45,7 +44,7 @@ func (s *StreamService) StartSRSPoller(ctx context.Context) {
 func (s *StreamService) pollSRS(ctx context.Context, seen map[string]bool) {
 	clients, err := s.fetchSRSClients(ctx)
 	if err != nil {
-		slog.Warn("srs poller: fetch clients failed", "err", err)
+		s.debugLog("srs poller: fetch clients failed", "err", err)
 		return // next poll will retry
 	}
 
@@ -63,7 +62,7 @@ func (s *StreamService) pollSRS(ctx context.Context, seen map[string]bool) {
 		// Try to authenticate and start the stream.
 		userID, err := s.AuthenticateStreamKey(ctx, c.Name)
 		if err != nil {
-			slog.Warn("srs poller: authenticate stream key failed", "err", err, "key", c.Name)
+			s.warnLog("srs poller: authenticate stream key failed", "err", err, "key", c.Name)
 			continue
 		}
 
@@ -77,18 +76,18 @@ func (s *StreamService) pollSRS(ctx context.Context, seen map[string]bool) {
 		hlsPath := "/hls/live/" + c.Name + ".m3u8"
 		stream, err := s.repo.CreateStream(ctx, userID, nil, 0, hlsPath)
 		if err != nil {
-			slog.Error("srs poller: create stream", "err", err, "user_id", userID)
+			s.errorLog("srs poller: create stream", "err", err, "user_id", userID)
 			continue
 		}
 
 		if err := s.authRepo.SetLiveStatus(ctx, userID, true); err != nil {
-			slog.Error("srs poller: set live status", "err", err, "user_id", userID)
+			s.errorLog("srs poller: set live status", "err", err, "user_id", userID)
 			continue
 		}
 
 		s.hub.NotifyStreamStarted(userID, stream.ID)
 		seen[c.Name] = true
-		slog.Info("srs poller: stream started", "stream_id", stream.ID, "user_id", userID)
+		s.infoLog("srs poller: stream started", "stream_id", stream.ID, "user_id", userID)
 	}
 
 	// Detect streams that ended (key in seen but no longer active).
@@ -100,17 +99,42 @@ func (s *StreamService) pollSRS(ctx context.Context, seen map[string]bool) {
 				stream, err := s.repo.GetStreamByUserID(ctx, userID)
 				if err == nil {
 					if endErr := s.repo.EndStream(ctx, stream.ID, "", "", 0); endErr != nil {
-						slog.Error("srs poller: end stream failed", "err", endErr, "stream_id", stream.ID)
+						s.errorLog("srs poller: end stream failed", "err", endErr, "stream_id", stream.ID)
 					}
 					if statusErr := s.authRepo.SetLiveStatus(ctx, userID, false); statusErr != nil {
-						slog.Error("srs poller: set live status failed", "err", statusErr, "user_id", userID)
+						s.errorLog("srs poller: set live status failed", "err", statusErr, "user_id", userID)
 					}
 					s.hub.NotifyStreamEnded(userID)
-					slog.Info("srs poller: stream ended", "user_id", userID)
+					s.infoLog("srs poller: stream ended", "user_id", userID)
 				}
 			}
 			delete(seen, key)
 		}
+	}
+}
+
+// Log helpers that respect the configured logger (nil-safe).
+func (s *StreamService) debugLog(msg string, args ...any) {
+	if s.logger != nil {
+		s.logger.Debug(msg, args...)
+	}
+}
+
+func (s *StreamService) infoLog(msg string, args ...any) {
+	if s.logger != nil {
+		s.logger.Info(msg, args...)
+	}
+}
+
+func (s *StreamService) warnLog(msg string, args ...any) {
+	if s.logger != nil {
+		s.logger.Warn(msg, args...)
+	}
+}
+
+func (s *StreamService) errorLog(msg string, args ...any) {
+	if s.logger != nil {
+		s.logger.Error(msg, args...)
 	}
 }
 

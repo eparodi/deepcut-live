@@ -21,9 +21,10 @@ type StreamService struct {
 	srsSecret string
 	srsAPIURL string
 	http      *http.Client
+	logger    *slog.Logger
 }
 
-func NewStreamService(repo domain.StreamRepository, authRepo domain.AuthRepo, hub *StreamHub, srsSecret, srsAPIURL string) *StreamService {
+func NewStreamService(repo domain.StreamRepository, authRepo domain.AuthRepo, hub *StreamHub, srsSecret, srsAPIURL string, logger *slog.Logger) *StreamService {
 	return &StreamService{
 		repo:      repo,
 		authRepo:  authRepo,
@@ -33,6 +34,7 @@ func NewStreamService(repo domain.StreamRepository, authRepo domain.AuthRepo, hu
 		http: &http.Client{
 			Timeout: 5 * time.Second,
 		},
+		logger: logger,
 	}
 }
 
