@@ -4,18 +4,28 @@
 
 | # | Issue | Root Cause | Fix |
 |---|-------|-----------|-----|
-| 1 | WS integration test hanging (SendMessage never called) | `readPump` was doing concurrent writes to WebSocket (`wsjson.Write` for errors/pongs) while `writePump` also wrote — `nhooyr.io/websocket` requires single-writer goroutine | Routed all writes through `client.Send` channel via `sendToClient()` |
-| 2 | WS integration test failing (client.UserID empty) | WS route moved out of auth group; handler extracts auth from cookie/header, but test didn't pass auth credentials | Added `HTTPHeader` with Cookie to `websocket.DialOptions` in test |
-| 3 | Server test build failure | `chathttp.NewChatHandler` signature changed to include `chatAuth` parameter | Added `chatAuthAdapter` to server test and passed it to `NewChatHandler` |
-| 4 | `nil` logger causing panic in handler test error path | Test passed `nil` as logger; error path called `h.logger.Error()` | Used `testLogger()` instead of `nil` |
+| 1 | WS integration test hanging | `readPump` concurrent writes with `writePump` | Routed all writes through `client.Send` channel via `sendToClient()` |
+| 2 | WS integration test failing (client.UserID empty) | WS route moved out of auth group; test didn't pass auth | Added `HTTPHeader` with Cookie to `websocket.DialOptions` |
+| 3 | Server test build failure | `chathttp.NewChatHandler` signature changed | Added `chatAuthAdapter` to server test |
+| 4 | `nil` logger panic in handler test | Test passed `nil`; error path called `h.logger.Error()` | Used `testLogger()` instead of `nil` |
+| 5 | Chat panel never rendered | Backend never returned `streamId` in channel response | Added `StreamID` to `ChannelInfo`, repo query, and population |
+| 6 | WebSocket connection failed | `getWsUrl` used Next.js proxy (port 3000); cant proxy WS | Added separate `WS_HOST` pointing to backend directly |
+| 7 | Stream offline → infinite reconnect | HTTP 400 returned before WS upgrade; browser got no close code | Accept WS first, then close with code 4001 |
+| 8 | Messages appearing twice | React StrictMode double-invoke re-receives `sendInitialBatch` | Dedup by message ID in `onmessage` |
+| 9 | Sending messages twice | `<button>` without type defaults to submit; Enter fires both handlers | Added `type="button"` |
+| 10 | CI: Auth repo integration tests failing | Pre-existing: `CreateUser` param order mismatch after #18 | Reordered all 10 seed calls |
+| 11 | CI: Chat repo cursor test failing | Messages inserted in same microsecond; second-precision cursor filters all | Added 10ms sleeps + `RFC3339Nano` format |
+| 12 | CI: sqlc generate failing | Pre-existing: `stream_key` column added without regenerating sqlc output | Ran `sqlc generate` |
 
 ## Questions / Follow-Ups
 
-- [ ] Should `chatAuth.ValidateToken` accept a `context.Context` parameter? Currently uses `context.Background()` — fine for now but could be improved
-- [ ] `wsPingInterval` constant is defined but unused (client sends pings per spec, server doesn't initiate them)
-- [ ] `chatAuthAdapter` is duplicated between `main.go` and `server_test.go` — extract to shared package?
-- [ ] Error comparison `err.Error() == "rate limited"` should use a sentinel error instead of string comparison
+- [ ] Extract `chatAuthAdapter` to shared package (deferred: Go visibility constraint)
+- [ ] Make origin patterns configurable via env var
+- [ ] Simplify whitespace check with `strings.TrimSpace`
+- [ ] Consider per-client deadline timer instead of O(n) `ExpireIdle` scan
 
 ## Related Retros
 
 - [2026-08-10-chat-review.md](./2026-08-10-chat-review.md)
+- [2026-08-10-chat-retro.md](./2026-08-10-chat-retro.md)
+- [2026-08-10-nextjs-websocket-proxy.md](./2026-08-10-nextjs-websocket-proxy.md)
