@@ -1,6 +1,6 @@
 # US4 — Real-Time Chat
 
-**Status:** Design
+**Status:** Approved
 **Parent:** `_shared.md`
 **Depends on:** US2 (streams must exist), US1 (auth for sending messages)
 
@@ -200,3 +200,47 @@ so that I can participate in the conversation.
 - Enter = send, Shift+Enter = newline
 - Max 500 chars, counter appears at 400+
 - Disabled: not signed in, reconnecting, stream ended, rate-limited (shows "Wait 2s...")
+
+---
+
+## Task Checklist
+
+### Backend Fixes (gaps between spec and current impl)
+
+1. [x] **(Backend)** Fix domain entity — add `UserAvatarUrl` to `ChatMessage`
+   → Satisfies: API contract field parity with frontend types
+   → Files: `backend/internal/modules/chat/domain/entity.go`
+
+2. [x] **(Backend)** Fix Postgres repo — include `avatar_url` in JOIN, cursor-based pagination (`before` instead of `offset`), return `hasMore`
+   → Satisfies: US4 AC4, API contract for GET messages
+   → Files: `backend/internal/modules/chat/adapter/postgres/repo.go`, `repo_test.go`
+
+3. [x] **(Backend)** Fix route paths — WS at `/ws/chat/{streamID}`, HTTP at `/api/chat/{streamID}/messages`
+   → Satisfies: API contract route paths
+   → Files: `backend/cmd/server/main.go`, `backend/internal/modules/chat/adapter/http/handler.go`
+
+4. [x] **(Backend)** Fix WS protocol — `{type, payload}` envelope, ping/pong, send initial batch of last 50 messages on connect
+   → Satisfies: US4 AC1, US4 AC2
+   → Files: `backend/internal/modules/chat/adapter/http/handler.go`
+
+5. [x] **(Backend)** Add rate limiting — token bucket, 1 msg per 2 seconds per user, burst of 3
+   → Satisfies: edge case "rapid messages"
+   → Files: `backend/internal/modules/chat/application/service.go`
+
+6. [x] **(Backend)** Add stream validation + idle timeout — validate stream exists/live before accepting WS, close idle after 2 min
+   → Satisfies: Connection lifecycle spec
+   → Files: `backend/internal/modules/chat/adapter/http/handler.go`
+
+7. [x] **(Backend)** Fix auth — allow unauthenticated WS reads, require auth to send messages
+   → Satisfies: US4 AC3, API contract auth requirement
+   → Files: `backend/cmd/server/main.go`, `backend/internal/modules/chat/adapter/http/handler.go`
+
+### Frontend Fixes
+
+8. [x] [P] **(Frontend)** Fix WS URL — already correct at `/ws/chat/{streamId}`, matches new backend route
+   → Satisfies: US4 AC1
+   → Files: `frontend/src/components/ChatPanel.tsx` (no changes needed)
+
+9. [x] [P] **(Frontend)** Fix WS protocol — already sends `{type, payload}` envelope and handles `{type, payload}` responses
+   → Satisfies: US4 AC2
+   → Files: `frontend/src/components/ChatPanel.tsx` (no changes needed)

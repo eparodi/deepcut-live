@@ -30,8 +30,8 @@ func seedChatUser(t *testing.T, ctx context.Context, repo *ChatRepo, googleID, e
 	t.Helper()
 	var userID string
 	err := repo.pool.QueryRow(ctx,
-		`INSERT INTO users (google_id, email, name, stream_key_hash) VALUES ($1, $2, $3, $4) RETURNING id`,
-		googleID, email, name, "hash-"+googleID,
+		`INSERT INTO users (google_id, email, name, avatar_url, stream_key_hash) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+		googleID, email, name, "https://example.com/"+name+".jpg", "hash-"+googleID,
 	).Scan(&userID)
 	if err != nil {
 		t.Fatalf("seed user: %v", err)
@@ -84,6 +84,25 @@ func TestChatRepo_SaveMessage(t *testing.T) {
 	}
 }
 
+func TestChatRepo_GetStreamStatus(t *testing.T) {
+	testutil.SkipOnShort(t)
+	ctx := context.Background()
+	repo := NewChatRepo(testPool)
+	if err := testutil.TruncateAll(ctx, testPool); err != nil {
+		t.Fatalf("truncate: %v", err)
+	}
+	userID := seedChatUser(t, ctx, repo, "g-status", "status@test.com", "Status User")
+	streamID := seedChatStream(t, ctx, repo, userID)
+
+	isLive, err := repo.GetStreamStatus(ctx, streamID)
+	if err != nil {
+		t.Fatalf("GetStreamStatus: %v", err)
+	}
+	if !isLive {
+		t.Fatal("expected stream to be live")
+	}
+}
+
 func TestChatRepo_GetMessages(t *testing.T) {
 	testutil.SkipOnShort(t)
 	ctx := context.Background()
@@ -109,52 +128,63 @@ func TestChatRepo_GetMessages(t *testing.T) {
 	}
 
 	t.Run("returns messages with user join", func(t *testing.T) {
-		msgs, err := repo.GetMessages(ctx, streamID, 10, 0)
+		msgs, hasMore, err := repo.GetMessages(ctx, streamID, "", 10)
 		if err != nil {
 			t.Fatalf("GetMessages: %v", err)
 		}
 		if len(msgs) != 3 {
 			t.Fatalf("expected 3 messages, got %d", len(msgs))
 		}
+		if hasMore {
+			t.Fatal("expected hasMore=false")
+		}
 		// Messages should be ordered by sent_at DESC
 		if msgs[0].Message != "msg 3" {
 			t.Fatalf("first message = %q, want 'msg 3'", msgs[0].Message)
 		}
-		// Check user name is populated via JOIN
+		// Check user name and avatar are populated via JOIN
 		if msgs[0].UserName != "Chat Get" {
 			t.Fatalf("user_name = %q, want 'Chat Get'", msgs[0].UserName)
 		}
-	})
-
-	t.Run("empty list", func(t *testing.T) {
-		msgs, err := repo.GetMessages(ctx, "00000000-0000-0000-0000-000000000000", 10, 0)
-		if err != nil {
-			t.Fatalf("GetMessages (empty): %v", err)
-		}
-		if len(msgs) != 0 {
-			t.Fatalf("expected 0 messages, got %d", len(msgs))
+		if msgs[0].UserAvatarUrl != "https://example.com/Chat Get.jpg" {
+			t.Fatalf("user_avatar_url = %q, want 'https://example.com/Chat Get.jpg'", msgs[0].UserAvatarUrl)
 		}
 	})
 
-	t.Run("pagination with limit offset", func(t *testing.T) {
-		msgs, err := repo.GetMessages(ctx, streamID, 2, 0)
+	t.Run("not found returns error", func(t *testing.T) {
+		_, _, err := repo.GetMessages(ctx, "00000000-0000-0000-0000-000000000000", "", 10)
+		if err == nil {
+			t.Fatal("expected error for non-existent stream")
+		}
+	})
+
+	t.Run("pagination with hasMore", func(t *testing.T) {
+		msgs, hasMore, err := repo.GetMessages(ctx, streamID, "", 2)
 		if err != nil {
 			t.Fatalf("GetMessages (limit 2): %v", err)
 		}
 		if len(msgs) != 2 {
 			t.Fatalf("expected 2 messages, got %d", len(msgs))
 		}
+		if !hasMore {
+			t.Fatal("expected hasMore=true")
+		}
 
-		// offset 2 should return the remaining 1
-		msgs2, err := repo.GetMessages(ctx, streamID, 2, 2)
+		// Use cursor (before) to get the next page
+		// The oldest message returned was "msg 2", so use its sent_at as cursor
+		cursor := msgs[1].SentAt.Format("2006-01-02T15:04:05Z")
+		msgs2, hasMore2, err := repo.GetMessages(ctx, streamID, cursor, 10)
 		if err != nil {
-			t.Fatalf("GetMessages (offset 2): %v", err)
+			t.Fatalf("GetMessages (cursor): %v", err)
 		}
 		if len(msgs2) != 1 {
 			t.Fatalf("expected 1 message, got %d", len(msgs2))
 		}
+		if hasMore2 {
+			t.Fatal("expected hasMore=false for last page")
+		}
 		if msgs2[0].Message != "msg 1" {
-			t.Fatalf("offset message = %q, want 'msg 1'", msgs2[0].Message)
+			t.Fatalf("cursor message = %q, want 'msg 1'", msgs2[0].Message)
 		}
 	})
 }

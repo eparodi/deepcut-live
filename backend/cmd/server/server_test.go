@@ -90,7 +90,7 @@ func setupTestServer(t *testing.T) (*httptest.Server, func()) {
 	authHandler := authhttp.NewAuthHandler(authSvc, streamSvc, baseURL, logger)
 	streamHandler := streamhttp.NewStreamHandler(streamSvc, nil, logger)
 	vodHandler := vodhttp.NewVODHandler(vodSvc, logger)
-	chatHandler := chathttp.NewChatHandler(chatSvc, logger)
+	chatHandler := chathttp.NewChatHandler(chatSvc, newChatAuthAdapter(authSvc), logger)
 
 	// --- router (same middleware as main.go except Logger → skipped, Timeout → skipped) ---
 	r := chi.NewRouter()
@@ -113,6 +113,9 @@ func setupTestServer(t *testing.T) (*httptest.Server, func()) {
 	streamHandler.RegisterRoutes(r)
 	vodHandler.RegisterRoutes(r)
 	chatHandler.RegisterRoutes(r)
+
+	// Chat WebSocket (outside auth group — auth handled internally).
+	r.Get("/ws/chat/{streamID}", chatHandler.ChatWebSocket)
 
 	srv := httptest.NewServer(r)
 
@@ -575,4 +578,29 @@ func generateTestKeys() (privPEM, pubPEM string) {
 	pubBlock := &pem.Block{Type: "PUBLIC KEY", Bytes: pubBytes}
 	pubPEM = string(pem.EncodeToMemory(pubBlock))
 	return
+}
+
+// chatAuthAdapter adapts the auth service to the chat module's chatAuth interface.
+type chatAuthAdapter struct {
+	authSvc *application.AuthService
+}
+
+func newChatAuthAdapter(authSvc *application.AuthService) *chatAuthAdapter {
+	return &chatAuthAdapter{authSvc: authSvc}
+}
+
+func (a *chatAuthAdapter) ValidateToken(tokenStr string) (userID, userName, userAvatarUrl string, err error) {
+	userID, err = a.authSvc.ValidateJWT(tokenStr)
+	if err != nil {
+		return "", "", "", err
+	}
+	user, err := a.authSvc.GetByID(context.Background(), userID)
+	if err != nil {
+		return "", "", "", err
+	}
+	avatar := ""
+	if user.AvatarURL != nil {
+		avatar = *user.AvatarURL
+	}
+	return userID, user.Name, avatar, nil
 }

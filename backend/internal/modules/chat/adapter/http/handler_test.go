@@ -19,9 +19,10 @@ import (
 // ---------------------------------------------------------------------------
 
 type mockChatService struct {
-	getHubFn      func() *application.ChatHub
-	sendMessageFn func(ctx context.Context, streamID, userID, userName, message string) (*domain.ChatMessage, error)
-	getMessagesFn func(ctx context.Context, streamID string, limit, offset int) ([]domain.ChatMessage, error)
+	getHubFn       func() *application.ChatHub
+	sendMessageFn  func(ctx context.Context, streamID, userID, userName, userAvatarUrl, message string) (*domain.ChatMessage, error)
+	getMessagesFn  func(ctx context.Context, streamID string, before string, limit int) ([]domain.ChatMessage, bool, error)
+	isStreamLiveFn func(ctx context.Context, streamID string) (bool, error)
 }
 
 func (m *mockChatService) GetHub() *application.ChatHub {
@@ -31,9 +32,9 @@ func (m *mockChatService) GetHub() *application.ChatHub {
 	return &application.ChatHub{}
 }
 
-func (m *mockChatService) SendMessage(ctx context.Context, streamID, userID, userName, message string) (*domain.ChatMessage, error) {
+func (m *mockChatService) SendMessage(ctx context.Context, streamID, userID, userName, userAvatarUrl, message string) (*domain.ChatMessage, error) {
 	if m.sendMessageFn != nil {
-		return m.sendMessageFn(ctx, streamID, userID, userName, message)
+		return m.sendMessageFn(ctx, streamID, userID, userName, userAvatarUrl, message)
 	}
 	return &domain.ChatMessage{
 		ID:       "msg-1",
@@ -45,13 +46,35 @@ func (m *mockChatService) SendMessage(ctx context.Context, streamID, userID, use
 	}, nil
 }
 
-func (m *mockChatService) GetMessages(ctx context.Context, streamID string, limit, offset int) ([]domain.ChatMessage, error) {
+func (m *mockChatService) GetMessages(ctx context.Context, streamID string, before string, limit int) ([]domain.ChatMessage, bool, error) {
 	if m.getMessagesFn != nil {
-		return m.getMessagesFn(ctx, streamID, limit, offset)
+		return m.getMessagesFn(ctx, streamID, before, limit)
 	}
 	return []domain.ChatMessage{
-		{ID: "msg-1", StreamID: streamID, UserID: "user-1", UserName: "Alice", Message: "hello", SentAt: time.Now()},
-	}, nil
+		{ID: "msg-1", StreamID: streamID, UserID: "user-1", UserName: "Alice", UserAvatarUrl: "https://example.com/avatar.jpg", Message: "hello", SentAt: time.Now()},
+	}, false, nil
+}
+
+func (m *mockChatService) IsStreamLive(ctx context.Context, streamID string) (bool, error) {
+	if m.isStreamLiveFn != nil {
+		return m.isStreamLiveFn(ctx, streamID)
+	}
+	return true, nil
+}
+
+// ---------------------------------------------------------------------------
+// mockChatAuth implements chatAuth for handler tests
+// ---------------------------------------------------------------------------
+
+type mockChatAuth struct {
+	validateTokenFn func(tokenStr string) (userID, userName, userAvatarUrl string, err error)
+}
+
+func (m *mockChatAuth) ValidateToken(tokenStr string) (string, string, string, error) {
+	if m.validateTokenFn != nil {
+		return m.validateTokenFn(tokenStr)
+	}
+	return "user-1", "Alice", "https://example.com/avatar.jpg", nil
 }
 
 // ---------------------------------------------------------------------------
@@ -72,9 +95,9 @@ func TestGetMessages(t *testing.T) {
 			wantCode: http.StatusOK,
 		},
 		{
-			name:     "happy path — with limit and offset",
+			name:     "happy path — with before cursor",
 			streamID: "stream-1",
-			query:    "?limit=10&offset=5",
+			query:    "?before=2026-01-01T00:00:00Z&limit=10",
 			wantCode: http.StatusOK,
 		},
 		{
@@ -86,28 +109,22 @@ func TestGetMessages(t *testing.T) {
 			name:     "service error",
 			streamID: "stream-1",
 			setupMock: func(m *mockChatService) {
-				m.getMessagesFn = func(ctx context.Context, streamID string, limit, offset int) ([]domain.ChatMessage, error) {
-					return nil, errs.Internal("db error")
+				m.getMessagesFn = func(ctx context.Context, streamID string, before string, limit int) ([]domain.ChatMessage, bool, error) {
+					return nil, false, errs.Internal("db error")
 				}
 			},
 			wantCode: http.StatusInternalServerError,
 		},
 		{
-			name:     "invalid limit — should fall back to default",
+			name:     "invalid limit — falls back to default",
 			streamID: "stream-1",
 			query:    "?limit=invalid",
 			wantCode: http.StatusOK,
 		},
 		{
-			name:     "limit too high — clamped to default",
+			name:     "limit too high — clamped to max",
 			streamID: "stream-1",
 			query:    "?limit=999",
-			wantCode: http.StatusOK,
-		},
-		{
-			name:     "negative offset — falls back to default",
-			streamID: "stream-1",
-			query:    "?offset=-1",
 			wantCode: http.StatusOK,
 		},
 	}
@@ -118,9 +135,9 @@ func TestGetMessages(t *testing.T) {
 			if tt.setupMock != nil {
 				tt.setupMock(svc)
 			}
-			h := NewChatHandler(svc, nil)
+			h := NewChatHandler(svc, newTestAuth(), testLogger())
 
-			u := "/api/chat/messages/" + tt.streamID + tt.query
+			u := "/api/chat/" + tt.streamID + "/messages" + tt.query
 			req := httptest.NewRequest(http.MethodGet, u, nil)
 			if tt.streamID != "" {
 				rctx := chi.NewRouteContext()
@@ -131,7 +148,7 @@ func TestGetMessages(t *testing.T) {
 			h.GetMessages(rec, req)
 
 			if rec.Code != tt.wantCode {
-				t.Errorf("got %d, want %d", rec.Code, tt.wantCode)
+				t.Errorf("got %d, want %d (body=%s)", rec.Code, tt.wantCode, rec.Body.String())
 			}
 		})
 	}
