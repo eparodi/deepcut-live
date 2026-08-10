@@ -15,7 +15,7 @@ import (
 // ---------------------------------------------------------------------------
 
 type mockStreamRepo struct {
-	createStreamFn           func(ctx context.Context, userID string, title *string, srsClientID int) (*domain.Stream, error)
+	createStreamFn           func(ctx context.Context, userID string, title *string, srsClientID int, hlsPath string) (*domain.Stream, error)
 	endStreamFn              func(ctx context.Context, streamID string, hlsPath, recordingPath string, durationSeconds int) error
 	updateStreamStatusFn     func(ctx context.Context, streamID, status string) error
 	getStreamByUserIDFn      func(ctx context.Context, userID string) (*domain.Stream, error)
@@ -30,9 +30,9 @@ type mockStreamRepo struct {
 	updateStreamAnalyticsFn  func(ctx context.Context, userID string, date string, duration, peak, unique int) error
 }
 
-func (m *mockStreamRepo) CreateStream(ctx context.Context, userID string, title *string, srsClientID int) (*domain.Stream, error) {
+func (m *mockStreamRepo) CreateStream(ctx context.Context, userID string, title *string, srsClientID int, hlsPath string) (*domain.Stream, error) {
 	if m.createStreamFn != nil {
-		return m.createStreamFn(ctx, userID, title, srsClientID)
+		return m.createStreamFn(ctx, userID, title, srsClientID, hlsPath)
 	}
 	return &domain.Stream{
 		ID:          "stream-1",
@@ -311,7 +311,7 @@ func TestOnStreamStart(t *testing.T) {
 			rawKey:      "sk-abc",
 			srsClientID: 1,
 			setupMock: func(auth *mockStreamAuthRepo, stream *mockStreamRepo) {
-				stream.createStreamFn = func(ctx context.Context, userID string, title *string, srsClientID int) (*domain.Stream, error) {
+				stream.createStreamFn = func(ctx context.Context, userID string, title *string, srsClientID int, hlsPath string) (*domain.Stream, error) {
 					return nil, errors.New("insert failed")
 				}
 			},

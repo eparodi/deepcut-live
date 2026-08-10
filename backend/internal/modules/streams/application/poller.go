@@ -45,7 +45,8 @@ func (s *StreamService) StartSRSPoller(ctx context.Context) {
 func (s *StreamService) pollSRS(ctx context.Context, seen map[string]bool) {
 	clients, err := s.fetchSRSClients(ctx)
 	if err != nil {
-		return // silently skip — next poll will retry
+		slog.Warn("srs poller: fetch clients failed", "err", err)
+		return // next poll will retry
 	}
 
 	activeKeys := make(map[string]bool)
@@ -62,7 +63,8 @@ func (s *StreamService) pollSRS(ctx context.Context, seen map[string]bool) {
 		// Try to authenticate and start the stream.
 		userID, err := s.AuthenticateStreamKey(ctx, c.Name)
 		if err != nil {
-			continue // invalid key or not found
+			slog.Warn("srs poller: authenticate stream key failed", "err", err, "key", c.Name)
+			continue
 		}
 
 		// Check if user already has an active stream.
@@ -97,8 +99,12 @@ func (s *StreamService) pollSRS(ctx context.Context, seen map[string]bool) {
 			if err == nil {
 				stream, err := s.repo.GetStreamByUserID(ctx, userID)
 				if err == nil {
-					s.repo.EndStream(ctx, stream.ID, "", "", 0)
-					s.authRepo.SetLiveStatus(ctx, userID, false)
+					if endErr := s.repo.EndStream(ctx, stream.ID, "", "", 0); endErr != nil {
+						slog.Error("srs poller: end stream failed", "err", endErr, "stream_id", stream.ID)
+					}
+					if statusErr := s.authRepo.SetLiveStatus(ctx, userID, false); statusErr != nil {
+						slog.Error("srs poller: set live status failed", "err", statusErr, "user_id", userID)
+					}
 					s.hub.NotifyStreamEnded(userID)
 					slog.Info("srs poller: stream ended", "user_id", userID)
 				}

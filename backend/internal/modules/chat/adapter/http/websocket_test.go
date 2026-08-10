@@ -16,6 +16,7 @@ import (
 	"nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
 
+	authhttp "github.com/deepcut/live/internal/modules/auth/adapter/http"
 	"github.com/deepcut/live/internal/modules/chat/application"
 	"github.com/deepcut/live/internal/modules/chat/domain"
 )
@@ -60,45 +61,67 @@ func decodeBroadcast(t *testing.T, data []byte) domain.ChatMessage {
 	return msg
 }
 
+// newAuthRouter creates a chi router that registers the ChatWebSocket with
+// a mock auth middleware that injects the given userID into the context.
+// This mirrors how main.go wires the route inside the AuthMiddleware group.
+func newAuthRouter(h *ChatHandler, userID string) chi.Router {
+	r := chi.NewRouter()
+	r.Group(func(r chi.Router) {
+		r.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				ctx := authhttp.WithUserID(r.Context(), userID)
+				next.ServeHTTP(w, r.WithContext(ctx))
+			})
+		})
+		r.Get("/api/chat/ws/{streamID}", h.ChatWebSocket)
+	})
+	return r
+}
+
 // ---------------------------------------------------------------------------
 // TestChatWebSocket_MissingParams
 // ---------------------------------------------------------------------------
 
 func TestChatWebSocket_MissingParams(t *testing.T) {
 	tests := []struct {
-		name     string
-		streamID string
-		userID   string
-		userName string
-		wantCode int
+		name       string
+		streamID   string
+		userID     string // auth context userID
+		userName   string // query param
+		setAuthCtx bool   // whether to set userID in context
+		wantCode   int
 	}{
 		{
-			name:     "missing streamID",
-			streamID: "",
-			userID:   "user-1",
-			userName: "Alice",
-			wantCode: http.StatusBadRequest,
+			name:       "missing streamID",
+			streamID:   "",
+			userID:     "user-1",
+			userName:   "Alice",
+			setAuthCtx: true,
+			wantCode:   http.StatusBadRequest,
 		},
 		{
-			name:     "missing userId",
-			streamID: "stream-1",
-			userID:   "",
-			userName: "Alice",
-			wantCode: http.StatusBadRequest,
+			name:       "no authentication",
+			streamID:   "stream-1",
+			userID:     "",
+			userName:   "Alice",
+			setAuthCtx: false,
+			wantCode:   http.StatusUnauthorized,
 		},
 		{
-			name:     "missing userName",
-			streamID: "stream-1",
-			userID:   "user-1",
-			userName: "",
-			wantCode: http.StatusBadRequest,
+			name:       "missing userName",
+			streamID:   "stream-1",
+			userID:     "user-1",
+			userName:   "",
+			setAuthCtx: true,
+			wantCode:   http.StatusBadRequest,
 		},
 		{
-			name:     "missing both userId and userName",
-			streamID: "stream-1",
-			userID:   "",
-			userName: "",
-			wantCode: http.StatusBadRequest,
+			name:       "no auth and missing userName",
+			streamID:   "stream-1",
+			userID:     "",
+			userName:   "",
+			setAuthCtx: false,
+			wantCode:   http.StatusUnauthorized,
 		},
 	}
 
@@ -110,10 +133,14 @@ func TestChatWebSocket_MissingParams(t *testing.T) {
 			h := NewChatHandler(svc, testLogger())
 
 			u := "/api/chat/ws/" + tt.streamID
-			if tt.userID != "" || tt.userName != "" {
-				u += "?userId=" + tt.userID + "&userName=" + tt.userName
+			if tt.userName != "" {
+				u += "?userName=" + tt.userName
 			}
 			req := httptest.NewRequest(http.MethodGet, u, nil)
+
+			if tt.setAuthCtx {
+				req = req.WithContext(authhttp.WithUserID(req.Context(), tt.userID))
+			}
 
 			if tt.streamID != "" {
 				rctx := chi.NewRouteContext()
@@ -170,12 +197,12 @@ func TestChatWebSocket_Integration(t *testing.T) {
 
 	handler := NewChatHandler(svc, testLogger())
 
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	// Register via the auth router (mimics main.go auth group).
+	r := newAuthRouter(handler, "user-1")
 	srv := httptest.NewServer(r)
 	defer srv.Close()
 
-	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/api/chat/ws/test-stream?userId=user-1&userName=Alice"
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/api/chat/ws/test-stream?userName=Alice"
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -241,12 +268,12 @@ func TestChatWebSocket_BroadcastReceived(t *testing.T) {
 
 	handler := NewChatHandler(svc, testLogger())
 
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	// Register via the auth router (mimics main.go auth group).
+	r := newAuthRouter(handler, "user-1")
 	srv := httptest.NewServer(r)
 	defer srv.Close()
 
-	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/api/chat/ws/test-stream?userId=user-1&userName=Alice"
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/api/chat/ws/test-stream?userName=Alice"
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -298,23 +325,11 @@ func TestRegisterRoutes(t *testing.T) {
 	h.RegisterRoutes(r)
 
 	// RegisterRoutes must not panic and must make the router non-empty.
-	// We verify by starting a server and hitting each route — none should 404.
-
 	srv := httptest.NewServer(r)
 	defer srv.Close()
 
-	t.Run("WebSocket route is registered", func(t *testing.T) {
-		// A plain HTTP GET won't upgrade, but it must hit the handler (200 or 400),
-		// not return 404.
-		resp, err := http.Get(srv.URL + "/api/chat/ws/test-stream?userId=u&userName=n")
-		if err != nil {
-			t.Fatalf("GET ws route: %v", err)
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode == http.StatusNotFound {
-			t.Error("WebSocket route not registered (got 404)")
-		}
-	})
+	// ChatWebSocket is no longer registered via RegisterRoutes — it lives in
+	// the AuthMiddleware group in main.go. Only the messages route is registered.
 
 	t.Run("Messages route is registered", func(t *testing.T) {
 		resp, err := http.Get(srv.URL + "/api/chat/messages/test-stream")

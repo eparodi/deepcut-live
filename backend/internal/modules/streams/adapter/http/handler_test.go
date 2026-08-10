@@ -177,7 +177,7 @@ func TestSRSOnPublish(t *testing.T) {
 		{
 			name:   "invalid srs secret",
 			body:   `{"action":"on_publish","client_id":1,"stream":"sk-abc"}`,
-			secret: "",
+			secret: "bad-secret",
 			setupMock: func(m *mockStreamService) {
 				m.verifySRSSecretFn = func(secret string) error {
 					return errs.Forbidden("invalid srs secret")
@@ -247,7 +247,7 @@ func TestSRSOnUnpublish(t *testing.T) {
 		{
 			name:   "invalid srs secret",
 			body:   `{"action":"on_unpublish","client_id":1}`,
-			secret: "",
+			secret: "bad-secret",
 			setupMock: func(m *mockStreamService) {
 				m.verifySRSSecretFn = func(secret string) error {
 					return errs.Forbidden("invalid srs secret")

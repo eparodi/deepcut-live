@@ -13,6 +13,7 @@ import (
 	"nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
 
+	authhttp "github.com/deepcut/live/internal/modules/auth/adapter/http"
 	"github.com/deepcut/live/internal/modules/chat/application"
 	"github.com/deepcut/live/internal/modules/chat/domain"
 	"github.com/deepcut/live/internal/shared/errs"
@@ -41,12 +42,13 @@ func NewChatHandler(svc chatService, logger *slog.Logger) *ChatHandler {
 }
 
 // RegisterRoutes registers all chat routes on the given router.
+// Note: ChatWebSocket is registered inside the AuthMiddleware group in main.go.
 func (h *ChatHandler) RegisterRoutes(r chi.Router) {
-	r.Get("/api/chat/ws/{streamID}", h.ChatWebSocket)
 	r.Get("/api/chat/messages/{streamID}", h.GetMessages)
 }
 
 // ChatWebSocket upgrades an HTTP connection to WebSocket for real-time chat.
+// Must be inside the auth middleware group — userID comes from request context.
 func (h *ChatHandler) ChatWebSocket(w http.ResponseWriter, r *http.Request) {
 	streamID := chi.URLParam(r, "streamID")
 	if streamID == "" {
@@ -54,16 +56,22 @@ func (h *ChatHandler) ChatWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract user info from query params (auth middleware not required for chat)
-	userID := r.URL.Query().Get("userId")
+	// userID comes from the auth middleware (JWT validation).
+	userID := authhttp.UserIDFromCtx(r.Context())
+	if userID == "" {
+		render.Error(w, r, errs.Unauthorized("not authenticated"))
+		return
+	}
+
+	// userName is still a query param for display purposes.
 	userName := r.URL.Query().Get("userName")
-	if userID == "" || userName == "" {
-		render.Error(w, r, errs.BadRequest("missing userId or userName"))
+	if userName == "" {
+		render.Error(w, r, errs.BadRequest("missing userName"))
 		return
 	}
 
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		InsecureSkipVerify: true,
+		OriginPatterns: []string{"localhost:3000", "localhost:8081"},
 	})
 	if err != nil {
 		h.logger.Error("websocket accept", "error", err)

@@ -106,10 +106,11 @@ func main() {
 	vodHandler.RegisterRoutes(r)
 	chatHandler.RegisterRoutes(r)
 
-	// Authenticated WebSocket for real-time stream status.
+	// Authenticated WebSocket endpoints.
 	r.Group(func(r chi.Router) {
 		r.Use(authHandler.AuthMiddleware)
 		r.Get("/api/streams/ws", streamHandler.StreamWebSocket)
+		r.Get("/api/chat/ws/{streamID}", chatHandler.ChatWebSocket)
 	})
 
 	// Background poller: queries SRS API for active streams.

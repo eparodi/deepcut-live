@@ -81,7 +81,9 @@ func (s *StreamService) OnStreamStart(ctx context.Context, rawKey string, srsCli
 		return nil, fmt.Errorf("set live status: %w", err)
 	}
 
-	s.hub.NotifyStreamStarted(userID, stream.ID)
+	if s.hub != nil {
+		s.hub.NotifyStreamStarted(userID, stream.ID)
+	}
 
 	return stream, nil
 }
@@ -101,7 +103,9 @@ func (s *StreamService) OnStreamEnd(ctx context.Context, srsClientID int, hlsPat
 		return fmt.Errorf("set live status: %w", err)
 	}
 
-	s.hub.NotifyStreamEnded(stream.UserID)
+	if s.hub != nil {
+		s.hub.NotifyStreamEnded(stream.UserID)
+	}
 
 	// Update analytics
 	date := time.Now().Format("2006-01-02")
@@ -124,7 +128,9 @@ func (s *StreamService) OnStreamInterrupted(ctx context.Context, srsClientID int
 	if err := s.authRepo.SetLiveStatus(ctx, stream.UserID, false); err != nil {
 		return fmt.Errorf("set live status: %w", err)
 	}
-	s.hub.NotifyStreamEnded(stream.UserID)
+	if s.hub != nil {
+		s.hub.NotifyStreamEnded(stream.UserID)
+	}
 	return nil
 }
 
@@ -204,7 +210,9 @@ func (s *StreamService) ForceEndStream(ctx context.Context, userID string) (stri
 		return "", fmt.Errorf("set live status: %w", err)
 	}
 
-	s.hub.NotifyStreamEnded(userID)
+	if s.hub != nil {
+		s.hub.NotifyStreamEnded(userID)
+	}
 
 	// Update analytics (same pattern as OnStreamEnd).
 	date := time.Now().Format("2006-01-02")

@@ -111,6 +111,12 @@ func UserIDFromCtx(ctx context.Context) string {
 	return id
 }
 
+// WithUserID returns a context with the user ID set (for use in tests and
+// other callers that need to simulate an authenticated context).
+func WithUserID(ctx context.Context, userID string) context.Context {
+	return context.WithValue(ctx, ctxKeyUserID, userID)
+}
+
 // GoogleOAuth redirects the user to Google's OAuth consent page.
 func (h *AuthHandler) GoogleOAuth(w http.ResponseWriter, r *http.Request) {
 	b := make([]byte, 16)

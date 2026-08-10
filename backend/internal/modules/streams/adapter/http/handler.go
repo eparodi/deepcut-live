@@ -99,13 +99,9 @@ func (h *StreamHandler) SRSOnPublish(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	secret := r.URL.Query().Get("secret")
-	// SRS might not support query params in callback URLs. When absent,
-	// trust the request (it comes from within the Docker network).
-	if secret != "" {
-		if err := h.svc.VerifySRSSecret(secret); err != nil {
-			render.Error(w, r, fmt.Errorf("verify srs secret: %w", err))
-			return
-		}
+	if err := h.svc.VerifySRSSecret(secret); err != nil {
+		render.Error(w, r, fmt.Errorf("verify srs secret: %w", err))
+		return
 	}
 
 	var body struct {
@@ -161,11 +157,9 @@ func (h *StreamHandler) SRSOnUnpublish(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	secret := r.URL.Query().Get("secret")
-	if secret != "" {
-		if err := h.svc.VerifySRSSecret(secret); err != nil {
-			render.Error(w, r, fmt.Errorf("verify srs secret: %w", err))
-			return
-		}
+	if err := h.svc.VerifySRSSecret(secret); err != nil {
+		render.Error(w, r, fmt.Errorf("verify srs secret: %w", err))
+		return
 	}
 
 	var body struct {
@@ -287,7 +281,7 @@ func (h *StreamHandler) StreamWebSocket(w http.ResponseWriter, r *http.Request) 
 	}
 
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		InsecureSkipVerify: true,
+		OriginPatterns: []string{"localhost:3000", "localhost:8081"},
 	})
 	if err != nil {
 		h.logger.Error("stream-status ws accept", "error", err)
