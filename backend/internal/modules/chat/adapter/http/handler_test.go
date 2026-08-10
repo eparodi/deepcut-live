@@ -67,12 +67,12 @@ func (m *mockChatService) IsStreamLive(ctx context.Context, streamID string) (bo
 // ---------------------------------------------------------------------------
 
 type mockChatAuth struct {
-	validateTokenFn func(tokenStr string) (userID, userName, userAvatarUrl string, err error)
+	validateTokenFn func(ctx context.Context, tokenStr string) (userID, userName, userAvatarUrl string, err error)
 }
 
-func (m *mockChatAuth) ValidateToken(tokenStr string) (string, string, string, error) {
+func (m *mockChatAuth) ValidateToken(ctx context.Context, tokenStr string) (string, string, string, error) {
 	if m.validateTokenFn != nil {
-		return m.validateTokenFn(tokenStr)
+		return m.validateTokenFn(ctx, tokenStr)
 	}
 	return "user-1", "Alice", "https://example.com/avatar.jpg", nil
 }

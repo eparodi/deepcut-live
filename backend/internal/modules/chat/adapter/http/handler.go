@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -30,12 +31,11 @@ type chatService interface {
 // chatAuth validates tokens and returns user info for chat display.
 // Implemented by an adapter over the auth service in main.go.
 type chatAuth interface {
-	ValidateToken(tokenStr string) (userID, userName, userAvatarUrl string, err error)
+	ValidateToken(ctx context.Context, tokenStr string) (userID, userName, userAvatarUrl string, err error)
 }
 
 const (
 	wsIdleTimeout       = 2 * time.Minute
-	wsPingInterval      = 30 * time.Second
 	initialBatchSize    = 50
 	defaultMessageLimit = 100
 	maxMessageLimit     = 200
@@ -107,7 +107,7 @@ func (h *ChatHandler) ChatWebSocket(w http.ResponseWriter, r *http.Request) {
 	var userID, userName, userAvatarUrl string
 	tokenStr := extractToken(r)
 	if tokenStr != "" {
-		if uid, name, avatar, err := h.auth.ValidateToken(tokenStr); err == nil {
+		if uid, name, avatar, err := h.auth.ValidateToken(r.Context(), tokenStr); err == nil {
 			userID = uid
 			userName = name
 			userAvatarUrl = avatar
@@ -268,7 +268,7 @@ func (h *ChatHandler) handleChatMessage(ctx context.Context, streamID string, cl
 
 	_, err := h.svc.SendMessage(ctx, streamID, client.UserID, client.UserName, client.UserAvatarUrl, p.Message)
 	if err != nil {
-		if err.Error() == "rate limited" {
+		if errors.Is(err, application.ErrRateLimited) {
 			h.sendToClient(client, "error", map[string]string{
 				"code":    "rate_limited",
 				"message": "Please wait before sending another message",

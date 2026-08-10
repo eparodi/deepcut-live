@@ -204,12 +204,12 @@ func newChatAuthAdapter(authSvc *authapp.AuthService) *chatAuthAdapter {
 	return &chatAuthAdapter{authSvc: authSvc}
 }
 
-func (a *chatAuthAdapter) ValidateToken(tokenStr string) (userID, userName, userAvatarUrl string, err error) {
+func (a *chatAuthAdapter) ValidateToken(ctx context.Context, tokenStr string) (userID, userName, userAvatarUrl string, err error) {
 	userID, err = a.authSvc.ValidateJWT(tokenStr)
 	if err != nil {
 		return "", "", "", err
 	}
-	user, err := a.authSvc.GetByID(context.Background(), userID)
+	user, err := a.authSvc.GetByID(ctx, userID)
 	if err != nil {
 		return "", "", "", err
 	}

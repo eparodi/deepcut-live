@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -10,6 +11,9 @@ import (
 
 	"github.com/deepcut/live/internal/modules/chat/domain"
 )
+
+// ErrRateLimited is returned when a user exceeds the rate limit.
+var ErrRateLimited = errors.New("rate limited")
 
 // Rate limit: 1 message per 2 seconds, burst of 3.
 const (
@@ -210,7 +214,7 @@ func (s *ChatService) GetHub() *ChatHub {
 func (s *ChatService) SendMessage(ctx context.Context, streamID, userID, userName, userAvatarUrl, message string) (*domain.ChatMessage, error) {
 	// Check rate limit
 	if !s.hub.AllowMessage(userID) {
-		return nil, fmt.Errorf("rate limited")
+		return nil, ErrRateLimited
 	}
 
 	msg, err := s.repo.SaveMessage(ctx, streamID, userID, message)
