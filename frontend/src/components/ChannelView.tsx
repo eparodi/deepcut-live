@@ -47,7 +47,7 @@ export function ChannelView({ id, initialChannel, isSignedIn }: Props) {
         <div className="flex flex-col lg:flex-row gap-6">
           <div className="flex-1 lg:max-w-[70%] space-y-4">
             {hlsUrl ? (
-              <VideoPlayer hlsUrl={hlsUrl} isLive={channel.isLive} />
+              <VideoPlayer hlsUrl={hlsUrl} isLive={channel.isLive} viewerCount={channel.viewerCount} />
             ) : (
               <div
                 className="w-full aspect-video rounded-xl flex items-center justify-center"

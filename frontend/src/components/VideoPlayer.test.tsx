@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render } from "@testing-library/react";
+import { render, fireEvent } from "@testing-library/react";
 import { VideoPlayer } from "./VideoPlayer";
 
 // Mock hls.js
@@ -54,16 +54,11 @@ describe("VideoPlayer", () => {
         isLive
       />
     );
-    // The component starts in "loading" state
-    // But since we mock Hls to return supported, it enters loading, then
-    // the useEffect fires, but the mock Hls is instantiated - loading overlay
-    // may or may not be visible depending on timing. Let's just check
-    // the component renders.
     const container = document.querySelector(".relative");
     expect(container).toBeInTheDocument();
   });
 
-  it("renders the video element with controls", () => {
+  it("renders the video element without native controls", () => {
     render(
       <VideoPlayer
         hlsUrl="https://example.com/stream.m3u8"
@@ -71,7 +66,7 @@ describe("VideoPlayer", () => {
       />
     );
     const video = document.querySelector("video");
-    expect(video).toHaveAttribute("controls");
+    expect(video).not.toHaveAttribute("controls");
     expect(video).toHaveAttribute("playsInline");
   });
 
@@ -84,5 +79,28 @@ describe("VideoPlayer", () => {
     );
     const video = document.querySelector("video");
     expect(video).toHaveProperty("muted", true);
+  });
+
+  it("renders without viewerCount prop", () => {
+    render(
+      <VideoPlayer
+        hlsUrl="https://example.com/stream.m3u8"
+        isLive
+      />
+    );
+    const video = document.querySelector("video");
+    expect(video).toBeInTheDocument();
+  });
+
+  it("renders with viewerCount prop", () => {
+    render(
+      <VideoPlayer
+        hlsUrl="https://example.com/stream.m3u8"
+        isLive
+        viewerCount={1234}
+      />
+    );
+    const video = document.querySelector("video");
+    expect(video).toBeInTheDocument();
   });
 });

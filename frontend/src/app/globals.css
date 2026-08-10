@@ -10,6 +10,7 @@
   --color-primary: #9146FF;
   --color-primary-hover: #772CE8;
   --color-danger: #DC2626;
+  --color-live: #E91916;
   --color-surface: #0E0E10;
   --color-surface-raised: #18181B;
   --color-text: #EFEFF1;
@@ -49,6 +50,7 @@
   --color-primary: var(--color-primary);
   --color-primary-hover: var(--color-primary-hover);
   --color-danger: var(--color-danger);
+  --color-live: var(--color-live);
   --color-surface: var(--color-surface);
   --color-surface-raised: var(--color-surface-raised);
   --color-text: var(--color-text);
