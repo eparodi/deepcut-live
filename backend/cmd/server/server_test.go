@@ -79,7 +79,7 @@ func setupTestServer(t *testing.T) (*httptest.Server, func()) {
 		authRepo, "test-client-id", "test-client-secret",
 		baseURL, privPEM, pubPEM,
 	)
-	streamSvc := streamapp.NewStreamService(streamRepo, authRepo, nil, srsSecret, "http://127.0.0.1:1985")
+	streamSvc := streamapp.NewStreamService(streamRepo, authRepo, nil, srsSecret, "http://127.0.0.1:1985", nil)
 	vodSvc := vodapp.NewVODService(vodRepo)
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))

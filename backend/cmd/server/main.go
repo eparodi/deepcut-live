@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -39,7 +40,7 @@ import (
 )
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	logger := newLogger()
 
 	port := env("PORT", "8081")
 	dbURL := env("DATABASE_URL", "postgres://live:live@localhost:5432/live?sslmode=disable")
@@ -73,7 +74,7 @@ func main() {
 
 	authSvc := authapp.NewAuthService(authRepo, googleClientID, googleClientSecret, baseURL, privateKeyPEM, publicKeyPEM)
 	streamHub := streamapp.NewStreamHub(logger)
-	streamSvc := streamapp.NewStreamService(streamRepo, authRepo, streamHub, srsSecret, srsAPIURL)
+	streamSvc := streamapp.NewStreamService(streamRepo, authRepo, streamHub, srsSecret, srsAPIURL, logger)
 	vodSvc := vodapp.NewVODService(vodRepo)
 	chatHub := chatapp.NewChatHub(chatRepo, logger)
 	chatSvc := chatapp.NewChatService(chatRepo, chatHub)
@@ -171,6 +172,19 @@ func loadOrGenerateKeys() (privatePEM, publicPEM string) {
 
 	fmt.Fprintf(os.Stderr, "Generated new ECDSA P-256 key pair. Set JWT_PRIVATE_KEY and JWT_PUBLIC_KEY env vars for persistence.\n")
 	return string(privPEM), string(pubPEM)
+}
+
+func newLogger() *slog.Logger {
+	level := slog.LevelInfo
+	switch strings.ToLower(os.Getenv("LOG_LEVEL")) {
+	case "debug":
+		level = slog.LevelDebug
+	case "warn":
+		level = slog.LevelWarn
+	case "error":
+		level = slog.LevelError
+	}
+	return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
 }
 
 func env(key, fallback string) string {
