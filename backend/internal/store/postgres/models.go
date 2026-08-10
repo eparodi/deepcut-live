@@ -63,4 +63,5 @@ type User struct {
 	LiveSince      pgtype.Timestamptz `json:"live_since"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	StreamKey      string             `json:"stream_key"`
 }

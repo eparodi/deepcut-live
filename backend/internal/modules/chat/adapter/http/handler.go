@@ -182,7 +182,7 @@ func (h *ChatHandler) sendInitialBatch(ctx context.Context, conn *websocket.Conn
 				"userName":      m.UserName,
 				"userAvatarUrl": m.UserAvatarUrl,
 				"message":       m.Message,
-				"sentAt":        m.SentAt.Format(time.RFC3339),
+				"sentAt":        m.SentAt.Format(time.RFC3339Nano),
 			},
 		}
 		if err := wsjson.Write(subCtx, conn, envelope); err != nil {

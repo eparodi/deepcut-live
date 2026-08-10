@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -113,15 +114,17 @@ func TestChatRepo_GetMessages(t *testing.T) {
 	userID := seedChatUser(t, ctx, repo, "g-chat-get", "chatget@test.com", "Chat Get")
 	streamID := seedChatStream(t, ctx, repo, userID)
 
-	// Save a few messages
+	// Save a few messages (with small gaps so timestamps differ)
 	_, err := repo.SaveMessage(ctx, streamID, userID, "msg 1")
 	if err != nil {
 		t.Fatalf("SaveMessage 1: %v", err)
 	}
+	time.Sleep(10 * time.Millisecond)
 	_, err = repo.SaveMessage(ctx, streamID, userID, "msg 2")
 	if err != nil {
 		t.Fatalf("SaveMessage 2: %v", err)
 	}
+	time.Sleep(10 * time.Millisecond)
 	_, err = repo.SaveMessage(ctx, streamID, userID, "msg 3")
 	if err != nil {
 		t.Fatalf("SaveMessage 3: %v", err)
@@ -170,9 +173,9 @@ func TestChatRepo_GetMessages(t *testing.T) {
 			t.Fatal("expected hasMore=true")
 		}
 
-		// Use cursor (before) to get the next page
-		// The oldest message returned was "msg 2", so use its sent_at as cursor
-		cursor := msgs[1].SentAt.Format("2006-01-02T15:04:05Z")
+		// Use cursor (before) to get the next page.
+		// The oldest message returned was "msg 2", so use its sent_at as cursor.
+		cursor := msgs[1].SentAt.Format(time.RFC3339Nano)
 		msgs2, hasMore2, err := repo.GetMessages(ctx, streamID, cursor, 10)
 		if err != nil {
 			t.Fatalf("GetMessages (cursor): %v", err)

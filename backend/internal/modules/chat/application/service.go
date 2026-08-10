@@ -147,7 +147,7 @@ func (h *ChatHub) Broadcast(streamID string, msg *domain.ChatMessage) {
 			"userName":      msg.UserName,
 			"userAvatarUrl": msg.UserAvatarUrl,
 			"message":       msg.Message,
-			"sentAt":        msg.SentAt.Format(time.RFC3339),
+			"sentAt":        msg.SentAt.Format(time.RFC3339Nano),
 		},
 	}
 	data, err := json.Marshal(envelope)
