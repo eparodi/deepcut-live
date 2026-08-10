@@ -776,7 +776,7 @@ func (h *Handler) writePump(ctx context.Context, conn *websocket.Conn, client *d
 | Blocking broadcast (`c.Send <- data`) | Non-blocking `select/default` |
 | `conn.Close()` without status code | `conn.Close(websocket.StatusNormalClosure, "")` |
 | Manually `json.Marshal` then `conn.Write` | `wsjson.Write(ctx, conn, v)` |
-| Skip `InsecureSkipVerify` for local dev | Set `InsecureSkipVerify: true` in dev |
+| Skip `InsecureSkipVerify` for local dev | Use `OriginPatterns: []string{"localhost:3000"}` to validate Origin headers. **Never** use `InsecureSkipVerify: true` — it disables CSWSH protection. |
 
 ### Testing WebSocket handlers
 
@@ -811,13 +811,63 @@ func TestWebSocket(t *testing.T) {
 ### Checklist for new WebSocket endpoints
 
 - [ ] Hub is a singleton wired in `main.go` (not created per-request)
+- [ ] Route registered inside an `AuthMiddleware` group
 - [ ] `Send` channel is buffered (`make(chan []byte, 64)`)
 - [ ] Broadcast uses non-blocking `select/default`
 - [ ] Context derived from `context.Background()`, not `r.Context()`
 - [ ] `defer conn.Close(websocket.StatusNormalClosure, "")`
 - [ ] `defer hub.Leave(...)` after `hub.Join(...)`
-- [ ] `InsecureSkipVerify: true` in `AcceptOptions` for dev
+- [ ] `AcceptOptions` uses `OriginPatterns`, NOT `InsecureSkipVerify`
+- [ ] All injected dependencies nil-checked before use (hub, services)
+- [ ] Write goroutine has `defer recover()` for panic safety
 - [ ] Test uses `httptest.NewServer` + `websocket.Dial`
+
+### Third-Party Webhooks (SRS callbacks, Stripe, etc.)
+
+When handling webhook callbacks from external services:
+
+- **Do NOT use `DisallowUnknownFields()`** — third-party services often send
+  extra metadata fields not relevant to your handler. Blocking them causes
+  the entire webhook to fail silently.
+  ```go
+  // ❌ Rejects SRS callback because it sends ip, vhost, app, etc.
+  dec.DisallowUnknownFields()
+
+  // ✅ Only decode the fields you need, ignore the rest.
+  var body struct {
+      Action   string `json:"action"`
+      ClientID int    `json:"client_id"`
+      Stream   string `json:"stream"`
+  }
+  dec := json.NewDecoder(r.Body)
+  dec.Decode(&body)
+  ```
+
+- **Match your struct to the actual payload**, not what you assume.
+  Read the service's documentation for the exact JSON field names.
+  Test with a real payload from the service (capture it once, use it
+  in a table-driven test).
+
+- **Verify file paths in the actual container.** Config directives like
+  `hls_path /data/hls` may be overridden by Docker image defaults.
+  Run `docker compose exec <svc> find / -name "*.m3u8"` to find where
+  files actually land.
+
+### Nil Guards for Injected Dependencies
+
+Services that accept dependencies via constructor injection (hub, repos,
+HTTP clients) must nil-check them before use — tests often construct
+services with `nil` for unused dependencies.
+
+```go
+func (s *StreamService) OnStreamStart(...) {
+    // ...
+    if s.hub != nil {
+        s.hub.NotifyStreamStarted(userID, stream.ID)
+    }
+    // ...
+}
+```
 
 ### Pre-Deploy Checklist
 

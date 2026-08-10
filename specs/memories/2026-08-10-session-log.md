@@ -1,49 +1,27 @@
 # Session Log — 2026-08-10
 
-## Session Summary
-Fixed agent-autonomy friction: Zed file-operation prompts, branching from stale branches, over-restrictive commit rules. Pulled `main` in both repos, applied AGENTS.md changes, created PRs.
+## Corrections Made
 
-## Corrections & Root Causes
+| # | Issue | Root Cause | Fix | Missing Rule |
+|---|-------|-----------|-----|-------------|
+| 1 | Stream key not detected by backend | SRS handler read key from `param` field instead of `stream` field | Added `stream` to JSON struct, primary extraction from `stream` with `param` fallback | Match handler body structs to actual API payload fields |
+| 2 | `DisallowUnknownFields()` rejected SRS callback | SRS sends extra fields (ip, vhost, app) not in handler struct | Removed `DisallowUnknownFields()` | Be lenient with third-party webhook bodies that have extra fields |
+| 3 | Stream key regenerated every page load | Raw key never stored in DB, frontend auto-generated on every visit | Added `stream_key` column, store raw key alongside hash, return in `/api/me` | Never discard generated secrets; persist them for retrieval |
+| 4 | Docker build cache stale after code changes | `go build` step was cached, old binary deployed | Used `--no-cache` flag | Always use `--no-cache` when deploying code changes to Docker |
+| 5 | SRS config loaded as `docker.conf` not `srs.conf` | ossrs/srs:5 image reads `docker.conf` by default | Mounted config as `srs.conf` (which SRS also reads via `--config`) | Verify which config file the Docker image actually loads |
+| 6 | SRS `http_hooks` not firing for `localhost` vhost | OBS connects as `vhost=localhost` but hooks only on `__defaultVhost__` | Added explicit `vhost localhost` + SRS poller as fallback | SRS vhost matching is not inherited; configure per-vhost |
+| 7 | HLS files at wrong path in SRS | SRS default path `./objs/nginx/html/live/` vs configured `/data/hls/` | Used actual SRS default path | Verify actual file locations in the container, not just config |
+| 8 | HLS playlist absolute paths break proxy | SRS generates `/live/...` paths in `.m3u8`, proxy only handled `/hls/...` | Added `/live/:path*` proxy rewrite | Proxy all paths referenced in HLS playlists, not just the playlist URL |
+| 9 | WebSocket proxy fails through Next.js | Next.js dev rewrites don't proxy WebSocket upgrades | Connected directly to backend on port 8081 | Next.js rewrite proxying does not support WebSocket in dev mode |
+| 10 | Chat WebSocket has no authentication | Route registered outside auth middleware | Moved to auth group, read userID from context | Every WebSocket endpoint must be behind auth |
+| 11 | `InsecureSkipVerify: true` disables Origin validation | Copied from example without understanding implications | Replaced with explicit `OriginPatterns` | Never use `InsecureSkipVerify` in production; validate Origin headers |
+| 12 | SRS `http_api` exposed on public port 8080 | Shared port with `http_server` | Moved `http_api` to internal port 1985 | Management APIs must not be on publicly-exposed ports |
+| 13 | Nil hub panic in service tests | `StreamService.hub` accessed without nil check | Added `if s.hub != nil` guards | All service dependencies that may be nil in tests need nil checks |
+| 14 | Poller silently discards errors | Copy-paste convenience, no logging | Added `slog.Warn`/`slog.Error` for all error paths | Per go-chi skill: "No bare error discards" |
+| 15 | Test compilation failures after signature change | `CreateStream` signature changed but mocks not updated | Updated all mock structs and call sites | Verify call sites before committing signature changes |
 
-| # | Event | Root Cause | Fix |
-|---|-------|-----------|-----|
-| 1 | Features created from old branches instead of `main` | No base-branch rule in AGENTS.md §6.2 | Added "always branch from latest main" rule with fetch-checkout-pull sequence |
-| 2 | Zed prompting for every file create/edit/delete inside repo | `move_path` still set to `"confirm"` in Zed settings; AGENTS.md §7.2 was too timid | Changed `move_path` to `"allow"`; rewrote §7.2 to grant full write autonomy with explicit blocklist |
-| 3 | Skills-test AGENTS.md merge conflict during stash pop | Upstream `main` had new `gh pr create` backtick tip; section numbering diverged between repos | Resolved by merging both: kept our new rules + retained upstream tip |
-| 4 | `git checkout main` fails in git-worktree setup | `main` already checked out in primary worktree | Used `git -C <primary-worktree> pull` as workaround; flagged as edge case in review |
+## Follow-ups
 
-## Questions / Follow-Ups
-
-- [ ] Should the two repos' AGENTS.md be kept in sync automatically (CI check)?
-- [ ] Should the branching rule account for git-worktree setups (use `git fetch origin main:main` instead of `git checkout main`)?
-- [ ] Should Zed's `default_profile` be enforced at project level via `.zed/settings.json`?
-- [ ] Should we create `frontend/.env.example` so new contributors know required env vars?
-
-## Files Changed
-
-- **Modified:** `AGENTS.md` — Sections 6.1, 6.2, 7.2 rewritten (both repos)
-- **Modified:** `~/.config/zed/settings.json` — `move_path` → `allow`
-- **Modified:** `frontend/next.config.ts` — hardcoded backend URL → `BACKEND_URL` env var (PR #17)
-- **Created:** `frontend/.env`, `backend/.env` (gitignored; documented required vars)
-
-## To retro at end
-
-- [x] Trace correction #1 → missing base-branch rule in AGENTS.md
-- [x] Trace correction #2 → missing write-autonomy rule + Zed config gap
-- [x] Trace correction #3 → repos drifted apart, no sync mechanism
-- [ ] Port findings to skills-test
-
----
-
-## Corrections & Lessons (2026-08-10 — Dev Environment Debugging)
-
-| # | Event | Root Cause | Fix |
-|---|-------|-----------|-----|
-| 5 | Frontend on port 3001 hung indefinitely, never returned a response | Server component `fetch()` in `page.tsx` called `http://localhost:3000/api/streams/live`; port 3000 was occupied by a git-worktree Next.js server, not the Go backend. The Next.js-to-Next.js request deadlocked. | Killed worktree server on port 3000. Restarted frontend on port 3000 (intended port). |
-| 6 | Google OAuth returned `Missing required parameter: client_id` | Docker Compose started the backend container before `GOOGLE_CLIENT_ID` was set in `.env`. `docker compose restart` reuses old container config; `docker compose up -d` is needed to pick up new env vars. | Ran `docker compose up -d backend` to recreate the container with current `.env` values. |
-| 7 | Backend `.env` not auto-loaded by Go | Go reads `os.Getenv()`, doesn't auto-load `.env` files. The backend was running in Docker (which loads via docker-compose), not locally. | Confirmed Docker was already running the backend. The local `go run` was unnecessary. |
-| 8 | `next.config.ts` had hardcoded `localhost:8081` rewrite destination | No rule requiring configurable backend URLs via env vars. | Changed to `BACKEND_URL` env var with `localhost:8081` default. PR #17. |
-
----
-
-*Retros: [agent-autonomy](./2026-08-10-agent-autonomy-retro.md), [dev-env-debugging](./2026-08-10-dev-env-debugging.md)*
+- [ ] Write migration rollback for `000002_add_stream_key`
+- [ ] Add integration test for full OBS → SRS → Backend → Frontend pipeline
+- [ ] Evaluate WebRTC for sub-second latency (v2)
