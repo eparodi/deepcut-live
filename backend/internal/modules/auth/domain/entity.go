@@ -8,6 +8,7 @@ type User struct {
 	Email          string
 	Name           string
 	AvatarURL      *string
+	StreamKey      string
 	StreamKeyHash  string
 	StreamTitle    *string
 	StreamCategory *string

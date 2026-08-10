@@ -46,6 +46,7 @@ func main() {
 	googleClientID := env("GOOGLE_CLIENT_ID", "")
 	googleClientSecret := env("GOOGLE_CLIENT_SECRET", "")
 	baseURL := env("BASE_URL", "http://localhost:3000")
+	corsOrigin := env("CORS_ORIGIN", "http://localhost:3000")
 	srsSecret := env("SRS_CALLBACK_SECRET", "dev-srs-secret")
 	srsAPIURL := env("SRS_API_URL", "http://srs:1985")
 
@@ -71,13 +72,14 @@ func main() {
 	chatRepo := chatpg.NewChatRepo(pool)
 
 	authSvc := authapp.NewAuthService(authRepo, googleClientID, googleClientSecret, baseURL, privateKeyPEM, publicKeyPEM)
-	streamSvc := streamapp.NewStreamService(streamRepo, authRepo, srsSecret, srsAPIURL)
+	streamHub := streamapp.NewStreamHub(logger)
+	streamSvc := streamapp.NewStreamService(streamRepo, authRepo, streamHub, srsSecret, srsAPIURL)
 	vodSvc := vodapp.NewVODService(vodRepo)
 	chatHub := chatapp.NewChatHub(chatRepo, logger)
 	chatSvc := chatapp.NewChatService(chatRepo, chatHub)
 
 	authHandler := authhttp.NewAuthHandler(authSvc, streamSvc, baseURL, logger)
-	streamHandler := streamhttp.NewStreamHandler(streamSvc, logger)
+	streamHandler := streamhttp.NewStreamHandler(streamSvc, streamHub, logger)
 	vodHandler := vodhttp.NewVODHandler(vodSvc, logger)
 	chatHandler := chathttp.NewChatHandler(chatSvc, logger)
 
@@ -88,7 +90,7 @@ func main() {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(30 * time.Second))
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:3000"},
+		AllowedOrigins:   []string{corsOrigin},
 		AllowedMethods:   []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type", "Authorization"},
 		AllowCredentials: true,
@@ -103,6 +105,16 @@ func main() {
 	streamHandler.RegisterRoutes(r)
 	vodHandler.RegisterRoutes(r)
 	chatHandler.RegisterRoutes(r)
+
+	// Authenticated WebSocket for real-time stream status.
+	r.Group(func(r chi.Router) {
+		r.Use(authHandler.AuthMiddleware)
+		r.Get("/api/streams/ws", streamHandler.StreamWebSocket)
+	})
+
+	// Background poller: queries SRS API for active streams.
+	// Falls back when SRS http_hooks callbacks don't fire.
+	go streamSvc.StartSRSPoller(context.Background())
 
 	srv := &http.Server{
 		Addr:              ":" + port,

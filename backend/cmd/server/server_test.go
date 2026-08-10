@@ -79,7 +79,7 @@ func setupTestServer(t *testing.T) (*httptest.Server, func()) {
 		authRepo, "test-client-id", "test-client-secret",
 		baseURL, privPEM, pubPEM,
 	)
-	streamSvc := streamapp.NewStreamService(streamRepo, authRepo, srsSecret, "http://127.0.0.1:1985")
+	streamSvc := streamapp.NewStreamService(streamRepo, authRepo, nil, srsSecret, "http://127.0.0.1:1985")
 	vodSvc := vodapp.NewVODService(vodRepo)
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -88,7 +88,7 @@ func setupTestServer(t *testing.T) (*httptest.Server, func()) {
 
 	// --- handlers ---
 	authHandler := authhttp.NewAuthHandler(authSvc, streamSvc, baseURL, logger)
-	streamHandler := streamhttp.NewStreamHandler(streamSvc, logger)
+	streamHandler := streamhttp.NewStreamHandler(streamSvc, nil, logger)
 	vodHandler := vodhttp.NewVODHandler(vodSvc, logger)
 	chatHandler := chathttp.NewChatHandler(chatSvc, logger)
 

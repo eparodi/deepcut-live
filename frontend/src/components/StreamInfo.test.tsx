@@ -12,6 +12,7 @@ const liveChannel: ChannelResponse = {
   isLive: true,
   viewerCount: 1234,
   hlsUrl: "https://example.com/stream.m3u8",
+  thumbnailUrl: null,
   startedAt: "2026-01-01T00:00:00Z",
   streamId: "stream-1",
 };
@@ -21,6 +22,7 @@ const offlineChannel: ChannelResponse = {
   isLive: false,
   viewerCount: 0,
   hlsUrl: null,
+  thumbnailUrl: null,
   streamId: null,
 };
 

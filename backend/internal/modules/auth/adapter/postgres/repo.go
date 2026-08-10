@@ -19,17 +19,17 @@ func NewAuthRepo(pool *pgxpool.Pool) *AuthRepo {
 	return &AuthRepo{pool: pool}
 }
 
-func (r *AuthRepo) CreateUser(ctx context.Context, googleID, email, name, avatarURL, keyHash string) (*domain.User, error) {
+func (r *AuthRepo) CreateUser(ctx context.Context, googleID, email, name, avatarURL, rawKey, keyHash string) (*domain.User, error) {
 	query := `
-		INSERT INTO users (google_id, email, name, avatar_url, stream_key_hash)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id, google_id, email, name, avatar_url, stream_key_hash,
+		INSERT INTO users (google_id, email, name, avatar_url, stream_key, stream_key_hash)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING id, google_id, email, name, avatar_url, stream_key, stream_key_hash,
 		          COALESCE(stream_title, ''), COALESCE(stream_category, ''),
 		          is_live, created_at, updated_at`
 	var u domain.User
-	err := r.pool.QueryRow(ctx, query, googleID, email, name, avatarURL, keyHash).Scan(
+	err := r.pool.QueryRow(ctx, query, googleID, email, name, avatarURL, rawKey, keyHash).Scan(
 		&u.ID, &u.GoogleID, &u.Email, &u.Name, &u.AvatarURL,
-		&u.StreamKeyHash, &u.StreamTitle, &u.StreamCategory,
+		&u.StreamKey, &u.StreamKeyHash, &u.StreamTitle, &u.StreamCategory,
 		&u.IsLive, &u.CreatedAt, &u.UpdatedAt,
 	)
 	if err != nil {
@@ -40,14 +40,14 @@ func (r *AuthRepo) CreateUser(ctx context.Context, googleID, email, name, avatar
 
 func (r *AuthRepo) GetByGoogleID(ctx context.Context, googleID string) (*domain.User, error) {
 	query := `
-		SELECT id, google_id, email, name, avatar_url, stream_key_hash,
+		SELECT id, google_id, email, name, avatar_url, stream_key, stream_key_hash,
 		       COALESCE(stream_title, ''), COALESCE(stream_category, ''),
 		       is_live, created_at, updated_at
 		FROM users WHERE google_id = $1`
 	var u domain.User
 	err := r.pool.QueryRow(ctx, query, googleID).Scan(
 		&u.ID, &u.GoogleID, &u.Email, &u.Name, &u.AvatarURL,
-		&u.StreamKeyHash, &u.StreamTitle, &u.StreamCategory,
+		&u.StreamKey, &u.StreamKeyHash, &u.StreamTitle, &u.StreamCategory,
 		&u.IsLive, &u.CreatedAt, &u.UpdatedAt,
 	)
 	if err == pgx.ErrNoRows {
@@ -61,14 +61,14 @@ func (r *AuthRepo) GetByGoogleID(ctx context.Context, googleID string) (*domain.
 
 func (r *AuthRepo) GetByID(ctx context.Context, id string) (*domain.User, error) {
 	query := `
-		SELECT id, google_id, email, name, avatar_url, stream_key_hash,
+		SELECT id, google_id, email, name, avatar_url, stream_key, stream_key_hash,
 		       COALESCE(stream_title, ''), COALESCE(stream_category, ''),
 		       is_live, created_at, updated_at
 		FROM users WHERE id = $1`
 	var u domain.User
 	err := r.pool.QueryRow(ctx, query, id).Scan(
 		&u.ID, &u.GoogleID, &u.Email, &u.Name, &u.AvatarURL,
-		&u.StreamKeyHash, &u.StreamTitle, &u.StreamCategory,
+		&u.StreamKey, &u.StreamKeyHash, &u.StreamTitle, &u.StreamCategory,
 		&u.IsLive, &u.CreatedAt, &u.UpdatedAt,
 	)
 	if err == pgx.ErrNoRows {
@@ -96,14 +96,14 @@ func (r *AuthRepo) GetUserIDByStreamKeyHash(ctx context.Context, hash string) (s
 
 func (r *AuthRepo) GetByStreamKeyHash(ctx context.Context, hash string) (*domain.User, error) {
 	query := `
-		SELECT id, google_id, email, name, avatar_url, stream_key_hash,
+		SELECT id, google_id, email, name, avatar_url, stream_key, stream_key_hash,
 		       COALESCE(stream_title, ''), COALESCE(stream_category, ''),
 		       is_live, created_at, updated_at
 		FROM users WHERE stream_key_hash = $1`
 	var u domain.User
 	err := r.pool.QueryRow(ctx, query, hash).Scan(
 		&u.ID, &u.GoogleID, &u.Email, &u.Name, &u.AvatarURL,
-		&u.StreamKeyHash, &u.StreamTitle, &u.StreamCategory,
+		&u.StreamKey, &u.StreamKeyHash, &u.StreamTitle, &u.StreamCategory,
 		&u.IsLive, &u.CreatedAt, &u.UpdatedAt,
 	)
 	if err == pgx.ErrNoRows {
@@ -115,8 +115,8 @@ func (r *AuthRepo) GetByStreamKeyHash(ctx context.Context, hash string) (*domain
 	return &u, nil
 }
 
-func (r *AuthRepo) UpdateStreamKey(ctx context.Context, userID, keyHash string) error {
-	_, err := r.pool.Exec(ctx, `UPDATE users SET stream_key_hash = $2, updated_at = now() WHERE id = $1`, userID, keyHash)
+func (r *AuthRepo) UpdateStreamKey(ctx context.Context, userID, rawKey, keyHash string) error {
+	_, err := r.pool.Exec(ctx, `UPDATE users SET stream_key = $2, stream_key_hash = $3, updated_at = now() WHERE id = $1`, userID, rawKey, keyHash)
 	if err != nil {
 		return fmt.Errorf("update stream key: %w", err)
 	}
@@ -147,7 +147,7 @@ func (r *AuthRepo) SetLiveStatus(ctx context.Context, userID string, isLive bool
 
 func (r *AuthRepo) GetLiveUsers(ctx context.Context) ([]domain.User, error) {
 	query := `
-		SELECT id, google_id, email, name, avatar_url, stream_key_hash,
+		SELECT id, google_id, email, name, avatar_url, stream_key, stream_key_hash,
 		       COALESCE(stream_title, ''), COALESCE(stream_category, ''),
 		       is_live, created_at, updated_at
 		FROM users WHERE is_live = true ORDER BY updated_at DESC`
@@ -162,7 +162,7 @@ func (r *AuthRepo) GetLiveUsers(ctx context.Context) ([]domain.User, error) {
 		var u domain.User
 		if err := rows.Scan(
 			&u.ID, &u.GoogleID, &u.Email, &u.Name, &u.AvatarURL,
-			&u.StreamKeyHash, &u.StreamTitle, &u.StreamCategory,
+			&u.StreamKey, &u.StreamKeyHash, &u.StreamTitle, &u.StreamCategory,
 			&u.IsLive, &u.CreatedAt, &u.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan live user: %w", err)

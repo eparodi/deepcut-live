@@ -685,7 +685,7 @@ func TestAuthMiddleware(t *testing.T) {
 
 			// Wrap a simple handler that checks context and returns 200
 			next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				userID := userIDFromCtx(r.Context())
+				userID := UserIDFromCtx(r.Context())
 				if userID == "" {
 					w.WriteHeader(http.StatusUnauthorized)
 					return

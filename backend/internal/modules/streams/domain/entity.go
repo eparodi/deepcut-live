@@ -50,6 +50,18 @@ type ChannelInfo struct {
 	ViewerCount    int     `json:"viewerCount"`
 }
 
+// StreamStatusClient represents a WebSocket-connected client listening for stream status events.
+type StreamStatusClient struct {
+	UserID string
+	Send   chan []byte
+}
+
+// StreamStatusEvent is sent over the WebSocket to notify the frontend of stream state changes.
+type StreamStatusEvent struct {
+	Type     string `json:"type"`               // "streamStarted" or "streamEnded"
+	StreamID string `json:"streamId,omitempty"` // set on streamStarted
+}
+
 // Analytics holds aggregated streaming statistics.
 type Analytics struct {
 	Period        string `json:"period"`

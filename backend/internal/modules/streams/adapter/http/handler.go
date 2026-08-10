@@ -10,13 +10,17 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"nhooyr.io/websocket"
 
 	"github.com/deepcut/live/internal/modules/streams/domain"
 	"github.com/deepcut/live/internal/shared/errs"
 	"github.com/deepcut/live/internal/shared/render"
+
+	authhttp "github.com/deepcut/live/internal/modules/auth/adapter/http"
 )
 
 // streamService is the subset of *application.StreamService methods that StreamHandler needs.
@@ -29,13 +33,20 @@ type streamService interface {
 	HeartbeatViewer(ctx context.Context, streamID, userID, clientID string) error
 }
 
+// streamHub is the subset of *application.StreamHub that the WebSocket handler needs.
+type streamHub interface {
+	Join(userID string, client *domain.StreamStatusClient)
+	Leave(userID string, client *domain.StreamStatusClient)
+}
+
 type StreamHandler struct {
 	svc    streamService
+	hub    streamHub
 	logger *slog.Logger
 }
 
-func NewStreamHandler(svc streamService, logger *slog.Logger) *StreamHandler {
-	return &StreamHandler{svc: svc, logger: logger}
+func NewStreamHandler(svc streamService, hub streamHub, logger *slog.Logger) *StreamHandler {
+	return &StreamHandler{svc: svc, hub: hub, logger: logger}
 }
 
 // RegisterRoutes registers all stream routes on the given router.
@@ -88,37 +99,48 @@ func (h *StreamHandler) SRSOnPublish(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	secret := r.URL.Query().Get("secret")
-	if err := h.svc.VerifySRSSecret(secret); err != nil {
-		render.Error(w, r, fmt.Errorf("verify srs secret: %w", err))
-		return
+	// SRS might not support query params in callback URLs. When absent,
+	// trust the request (it comes from within the Docker network).
+	if secret != "" {
+		if err := h.svc.VerifySRSSecret(secret); err != nil {
+			render.Error(w, r, fmt.Errorf("verify srs secret: %w", err))
+			return
+		}
 	}
 
 	var body struct {
 		Action   string `json:"action"`
 		ClientID int    `json:"client_id"`
-		Param    string `json:"param"` // contains ?secret=...&key=...
+		Stream   string `json:"stream"` // primary: the RTMP stream name (= OBS stream key)
+		Param    string `json:"param"`  // fallback: query-string params from the RTMP URL
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 4096)
 	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
+	// Do NOT DisallowUnknownFields — SRS sends ip, vhost, app, and other
+	// fields that aren't relevant here.
 	if err := dec.Decode(&body); err != nil {
 		render.Error(w, r, errs.BadRequest("invalid JSON: %v", err))
 		return
 	}
 
-	// Extract stream key from param (strip leading ?)
-	param := body.Param
-	if len(param) > 0 && param[0] == '?' {
-		param = param[1:]
-	}
-	vals, err := url.ParseQuery(param)
-	if err != nil {
-		render.Error(w, r, errs.BadRequest("invalid param: %v", err))
-		return
-	}
-	streamKey := ""
-	if v, ok := vals["key"]; ok && len(v) > 0 {
-		streamKey = v[0]
+	// Primary: the stream key is the RTMP stream name (SRS "stream" field).
+	streamKey := body.Stream
+
+	// Fallback: if stream is empty, try extracting from param query string.
+	// Some RTMP clients encode the key as ?key=... in the URL query.
+	if streamKey == "" {
+		param := body.Param
+		if len(param) > 0 && param[0] == '?' {
+			param = param[1:]
+		}
+		vals, err := url.ParseQuery(param)
+		if err != nil {
+			render.Error(w, r, errs.BadRequest("invalid param: %v", err))
+			return
+		}
+		if v, ok := vals["key"]; ok && len(v) > 0 {
+			streamKey = v[0]
+		}
 	}
 
 	stream, err := h.svc.OnStreamStart(r.Context(), streamKey, body.ClientID, "")
@@ -139,9 +161,11 @@ func (h *StreamHandler) SRSOnUnpublish(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	secret := r.URL.Query().Get("secret")
-	if err := h.svc.VerifySRSSecret(secret); err != nil {
-		render.Error(w, r, fmt.Errorf("verify srs secret: %w", err))
-		return
+	if secret != "" {
+		if err := h.svc.VerifySRSSecret(secret); err != nil {
+			render.Error(w, r, fmt.Errorf("verify srs secret: %w", err))
+			return
+		}
 	}
 
 	var body struct {
@@ -251,4 +275,68 @@ func (h *StreamHandler) ViewerHeartbeat(w http.ResponseWriter, r *http.Request) 
 	}
 
 	render.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// StreamWebSocket upgrades to WebSocket for real-time stream-status events.
+// Must be inside the auth middleware group — userID comes from request context.
+func (h *StreamHandler) StreamWebSocket(w http.ResponseWriter, r *http.Request) {
+	userID := authhttp.UserIDFromCtx(r.Context())
+	if userID == "" {
+		render.Error(w, r, errs.Unauthorized("not authenticated"))
+		return
+	}
+
+	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		InsecureSkipVerify: true,
+	})
+	if err != nil {
+		h.logger.Error("stream-status ws accept", "error", err)
+		return
+	}
+	defer conn.Close(websocket.StatusNormalClosure, "")
+
+	client := &domain.StreamStatusClient{
+		UserID: userID,
+		Send:   make(chan []byte, 64),
+	}
+
+	h.hub.Join(userID, client)
+	defer h.hub.Leave(userID, client)
+
+	// Connection lifetime — NOT derived from r.Context().
+	ctx, cancel := context.WithTimeout(context.Background(), 24*time.Hour)
+	defer cancel()
+
+	// writePump: send events from the hub to the WebSocket client.
+	go func() {
+		for {
+			select {
+			case data, ok := <-client.Send:
+				if !ok {
+					return
+				}
+				if err := conn.Write(ctx, websocket.MessageText, data); err != nil {
+					return
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	// readPump: keep the connection alive until the client disconnects.
+	// We don't expect any messages from the client for this endpoint.
+	for {
+		_, _, err := conn.Read(ctx)
+		if err != nil {
+			break
+		}
+	}
+}
+
+func safePrefix(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
 }

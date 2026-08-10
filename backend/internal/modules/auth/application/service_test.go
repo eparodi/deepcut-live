@@ -26,19 +26,19 @@ import (
 // ---------------------------------------------------------------------------
 
 type mockAuthRepo struct {
-	createUserFn         func(ctx context.Context, googleID, email, name, avatarURL, keyHash string) (*domain.User, error)
+	createUserFn         func(ctx context.Context, googleID, email, name, avatarURL, rawKey, keyHash string) (*domain.User, error)
 	getByGoogleIDFn      func(ctx context.Context, googleID string) (*domain.User, error)
 	getByIDFn            func(ctx context.Context, id string) (*domain.User, error)
 	getByStreamKeyHashFn func(ctx context.Context, hash string) (*domain.User, error)
-	updateStreamKeyFn    func(ctx context.Context, userID, keyHash string) error
+	updateStreamKeyFn    func(ctx context.Context, userID, rawKey, keyHash string) error
 	updateSettingsFn     func(ctx context.Context, userID, title, category string) error
 	setLiveStatusFn      func(ctx context.Context, userID string, isLive bool) error
 	getLiveUsersFn       func(ctx context.Context) ([]domain.User, error)
 }
 
-func (m *mockAuthRepo) CreateUser(ctx context.Context, googleID, email, name, avatarURL, keyHash string) (*domain.User, error) {
+func (m *mockAuthRepo) CreateUser(ctx context.Context, googleID, email, name, avatarURL, rawKey, keyHash string) (*domain.User, error) {
 	if m.createUserFn != nil {
-		return m.createUserFn(ctx, googleID, email, name, avatarURL, keyHash)
+		return m.createUserFn(ctx, googleID, email, name, avatarURL, rawKey, keyHash)
 	}
 	return &domain.User{
 		ID:        "user-1",
@@ -70,9 +70,9 @@ func (m *mockAuthRepo) GetByStreamKeyHash(ctx context.Context, hash string) (*do
 	return nil, errs.NotFound("user with stream key hash not found")
 }
 
-func (m *mockAuthRepo) UpdateStreamKey(ctx context.Context, userID, keyHash string) error {
+func (m *mockAuthRepo) UpdateStreamKey(ctx context.Context, userID, rawKey, keyHash string) error {
 	if m.updateStreamKeyFn != nil {
-		return m.updateStreamKeyFn(ctx, userID, keyHash)
+		return m.updateStreamKeyFn(ctx, userID, rawKey, keyHash)
 	}
 	return nil
 }
@@ -153,7 +153,7 @@ func TestCreateUser(t *testing.T) {
 			email:    "alice@example.com",
 			userName: "Alice",
 			setupMock: func(m *mockAuthRepo) {
-				m.createUserFn = func(ctx context.Context, googleID, email, name, avatarURL, keyHash string) (*domain.User, error) {
+				m.createUserFn = func(ctx context.Context, googleID, email, name, avatarURL, rawKey, keyHash string) (*domain.User, error) {
 					return nil, errors.New("db down")
 				}
 			},
@@ -379,7 +379,7 @@ func TestRegenerateStreamKey(t *testing.T) {
 			name:   "error — update fails",
 			userID: "user-1",
 			setupMock: func(m *mockAuthRepo) {
-				m.updateStreamKeyFn = func(ctx context.Context, userID, keyHash string) error {
+				m.updateStreamKeyFn = func(ctx context.Context, userID, rawKey, keyHash string) error {
 					return errors.New("update failed")
 				}
 			},
