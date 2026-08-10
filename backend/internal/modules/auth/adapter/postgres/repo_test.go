@@ -41,6 +41,7 @@ func TestAuthRepo_CreateUser(t *testing.T) {
 		email       string
 		nameVal     string
 		avatarURL   string
+		rawKey      string
 		keyHash     string
 		wantErr     bool
 		errContains string
@@ -51,6 +52,7 @@ func TestAuthRepo_CreateUser(t *testing.T) {
 			email:     "test@example.com",
 			nameVal:   "Test User",
 			avatarURL: "https://example.com/avatar.png",
+			rawKey:    "raw-key",
 			keyHash:   "hash-abc",
 		},
 		{
@@ -59,6 +61,7 @@ func TestAuthRepo_CreateUser(t *testing.T) {
 			email:       "test2@example.com",
 			nameVal:     "Test User 2",
 			avatarURL:   "",
+			rawKey:      "raw-key-2",
 			keyHash:     "hash-def",
 			wantErr:     true,
 			errContains: "duplicate key",
@@ -67,7 +70,7 @@ func TestAuthRepo_CreateUser(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			user, err := repo.CreateUser(ctx, "raw-key", tt.googleID, tt.email, tt.nameVal, tt.avatarURL, tt.keyHash)
+			user, err := repo.CreateUser(ctx, tt.googleID, tt.email, tt.nameVal, tt.avatarURL, tt.rawKey, tt.keyHash)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected error, got nil")
@@ -105,7 +108,7 @@ func TestAuthRepo_GetByGoogleID(t *testing.T) {
 	}
 
 	// Seed a user
-	_, err := repo.CreateUser(ctx, "raw-key", "g-123", "test@example.com", "Test User", "", "hash-abc")
+	_, err := repo.CreateUser(ctx, "g-123", "test@example.com", "Test User", "", "raw-key", "hash-abc")
 	if err != nil {
 		t.Fatalf("seed user: %v", err)
 	}
@@ -141,7 +144,7 @@ func TestAuthRepo_GetByID(t *testing.T) {
 		t.Fatalf("truncate: %v", err)
 	}
 
-	user, err := repo.CreateUser(ctx, "raw-key", "g-123", "test@example.com", "Test User", "", "hash-abc")
+	user, err := repo.CreateUser(ctx, "g-123", "test@example.com", "Test User", "", "raw-key", "hash-abc")
 	if err != nil {
 		t.Fatalf("seed user: %v", err)
 	}
@@ -175,7 +178,7 @@ func TestAuthRepo_GetByStreamKeyHash(t *testing.T) {
 		t.Fatalf("truncate: %v", err)
 	}
 
-	_, err := repo.CreateUser(ctx, "raw-key", "g-123", "test@example.com", "Test User", "", "hash-abc")
+	_, err := repo.CreateUser(ctx, "g-123", "test@example.com", "Test User", "", "raw-key", "hash-abc")
 	if err != nil {
 		t.Fatalf("seed user: %v", err)
 	}
@@ -209,7 +212,7 @@ func TestAuthRepo_GetUserIDByStreamKeyHash(t *testing.T) {
 		t.Fatalf("truncate: %v", err)
 	}
 
-	user, err := repo.CreateUser(ctx, "raw-key", "g-123", "test@example.com", "Test User", "", "hash-abc")
+	user, err := repo.CreateUser(ctx, "g-123", "test@example.com", "Test User", "", "raw-key", "hash-abc")
 	if err != nil {
 		t.Fatalf("seed user: %v", err)
 	}
@@ -243,7 +246,7 @@ func TestAuthRepo_UpdateStreamKey(t *testing.T) {
 		t.Fatalf("truncate: %v", err)
 	}
 
-	user, err := repo.CreateUser(ctx, "raw-key", "g-123", "test@example.com", "Test User", "", "hash-old")
+	user, err := repo.CreateUser(ctx, "g-123", "test@example.com", "Test User", "", "raw-key", "hash-old")
 	if err != nil {
 		t.Fatalf("seed user: %v", err)
 	}
@@ -271,7 +274,7 @@ func TestAuthRepo_UpdateSettings(t *testing.T) {
 		t.Fatalf("truncate: %v", err)
 	}
 
-	user, err := repo.CreateUser(ctx, "raw-key", "g-123", "test@example.com", "Test User", "", "hash-abc")
+	user, err := repo.CreateUser(ctx, "g-123", "test@example.com", "Test User", "", "raw-key", "hash-abc")
 	if err != nil {
 		t.Fatalf("seed user: %v", err)
 	}
@@ -301,7 +304,7 @@ func TestAuthRepo_SetLiveStatus(t *testing.T) {
 		t.Fatalf("truncate: %v", err)
 	}
 
-	user, err := repo.CreateUser(ctx, "raw-key", "g-123", "test@example.com", "Test User", "", "hash-abc")
+	user, err := repo.CreateUser(ctx, "g-123", "test@example.com", "Test User", "", "raw-key", "hash-abc")
 	if err != nil {
 		t.Fatalf("seed user: %v", err)
 	}
@@ -346,7 +349,7 @@ func TestAuthRepo_GetLiveUsers(t *testing.T) {
 			t.Fatalf("truncate: %v", err)
 		}
 
-		_, err := repo.CreateUser(ctx, "raw-key", "g-1", "u1@example.com", "User 1", "", "hash-1")
+		_, err := repo.CreateUser(ctx, "g-1", "u1@example.com", "User 1", "", "raw-key", "hash-1")
 		if err != nil {
 			t.Fatalf("seed user: %v", err)
 		}
@@ -365,11 +368,11 @@ func TestAuthRepo_GetLiveUsers(t *testing.T) {
 			t.Fatalf("truncate: %v", err)
 		}
 
-		u1, err := repo.CreateUser(ctx, "raw-key", "g-1", "u1@example.com", "User 1", "", "hash-1")
+		u1, err := repo.CreateUser(ctx, "g-1", "u1@example.com", "User 1", "", "raw-key", "hash-1")
 		if err != nil {
 			t.Fatalf("seed user 1: %v", err)
 		}
-		u2, err := repo.CreateUser(ctx, "raw-key", "g-2", "u2@example.com", "User 2", "", "hash-2")
+		u2, err := repo.CreateUser(ctx, "g-2", "u2@example.com", "User 2", "", "raw-key", "hash-2")
 		if err != nil {
 			t.Fatalf("seed user 2: %v", err)
 		}
