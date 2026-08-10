@@ -106,10 +106,17 @@ export function ChatPanel({
       try {
         const data = JSON.parse(event.data);
 
-        switch (data.type) {
-          case "message":
-            setMessages((prev) => [...prev, data.payload as ChatMessage]);
-            break;
+	        switch (data.type) {
+	          case "message":
+	            setMessages((prev) => {
+	              const msg = data.payload as ChatMessage;
+	              // Deduplicate: React StrictMode double-invokes the effect,
+	              // causing sendInitialBatch to fire twice. Skip if we already
+	              // have this message ID in the array.
+	              if (prev.some((m) => m.id === msg.id)) return prev;
+	              return [...prev, msg];
+	            });
+	            break;
           case "error":
             if (data.payload?.code === "rate_limited") {
               setIsRateLimited(true);
