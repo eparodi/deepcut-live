@@ -45,7 +45,8 @@ Created the Security Engineer role and performed initial security audit of DeepC
 - [x] Trace correction #7 (lint in CI) → retro: [2026-08-09-ux-fixes-retro.md](./2026-08-09-ux-fixes-retro.md)
 - [x] Trace correction #9 (double-fetch) → retro: [2026-08-09-ux-fixes-retro.md](./2026-08-09-ux-fixes-retro.md)
 - [x] Trace correction #10 (Node version) → retro: [2026-08-09-ux-fixes-retro.md](./2026-08-09-ux-fixes-retro.md)
+- [x] PR #15 review + security audit → retro: [2026-08-10-pr15-review-retro.md](./2026-08-10-pr15-review-retro.md)
 
 ---
 
-*Retros: [orchestrator-pipeline](./2026-08-09-orchestrator-pipeline-retro.md), [ux-fixes](./2026-08-09-ux-fixes-retro.md), [security-engineer-role](./2026-08-09-security-engineer-role-retro.md)*
+*Retros: [orchestrator-pipeline](./2026-08-09-orchestrator-pipeline-retro.md), [ux-fixes](./2026-08-09-ux-fixes-retro.md), [security-engineer-role](./2026-08-09-security-engineer-role-retro.md), [pr15-review](./2026-08-10-pr15-review-retro.md)*
