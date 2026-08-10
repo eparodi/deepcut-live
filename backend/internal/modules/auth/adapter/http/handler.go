@@ -105,10 +105,16 @@ func (h *AuthHandler) AuthMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// userIDFromCtx extracts the authenticated user ID from context.
-func userIDFromCtx(ctx context.Context) string {
+// UserIDFromCtx extracts the authenticated user ID from context.
+func UserIDFromCtx(ctx context.Context) string {
 	id, _ := ctx.Value(ctxKeyUserID).(string)
 	return id
+}
+
+// WithUserID returns a context with the user ID set (for use in tests and
+// other callers that need to simulate an authenticated context).
+func WithUserID(ctx context.Context, userID string) context.Context {
+	return context.WithValue(ctx, ctxKeyUserID, userID)
 }
 
 // GoogleOAuth redirects the user to Google's OAuth consent page.
@@ -215,7 +221,7 @@ type getMeResponse struct {
 func (h *AuthHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
-	userID := userIDFromCtx(r.Context())
+	userID := UserIDFromCtx(r.Context())
 	if userID == "" {
 		render.Error(w, r, errs.Unauthorized("not authenticated"))
 		return
@@ -232,6 +238,7 @@ func (h *AuthHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 		Email:          user.Email,
 		Name:           user.Name,
 		AvatarURL:      user.AvatarURL,
+		StreamKey:      &user.StreamKey,
 		StreamTitle:    user.StreamTitle,
 		StreamCategory: user.StreamCategory,
 		IsLive:         user.IsLive,
@@ -248,7 +255,7 @@ type regenerateStreamKeyRequest struct {
 func (h *AuthHandler) RegenerateStreamKey(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
-	userID := userIDFromCtx(r.Context())
+	userID := UserIDFromCtx(r.Context())
 	if userID == "" {
 		render.Error(w, r, errs.Unauthorized("not authenticated"))
 		return
@@ -294,7 +301,7 @@ type updateSettingsResponse struct {
 func (h *AuthHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
-	userID := userIDFromCtx(r.Context())
+	userID := UserIDFromCtx(r.Context())
 	if userID == "" {
 		render.Error(w, r, errs.Unauthorized("not authenticated"))
 		return
@@ -348,7 +355,7 @@ func (h *AuthHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 
 // GetAnalytics returns stream analytics for the authenticated user.
 func (h *AuthHandler) GetAnalytics(w http.ResponseWriter, r *http.Request) {
-	userID := userIDFromCtx(r.Context())
+	userID := UserIDFromCtx(r.Context())
 	if userID == "" {
 		render.Error(w, r, errs.Unauthorized("not authenticated"))
 		return
@@ -374,7 +381,7 @@ func (h *AuthHandler) GetAnalytics(w http.ResponseWriter, r *http.Request) {
 
 // ForceEndStream terminates the current live stream.
 func (h *AuthHandler) ForceEndStream(w http.ResponseWriter, r *http.Request) {
-	userID := userIDFromCtx(r.Context())
+	userID := UserIDFromCtx(r.Context())
 	if userID == "" {
 		render.Error(w, r, errs.Unauthorized("not authenticated"))
 		return

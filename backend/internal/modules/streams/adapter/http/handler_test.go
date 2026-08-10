@@ -129,7 +129,7 @@ func TestSRSCallback(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := &mockStreamService{}
-			h := NewStreamHandler(svc, testLogger())
+			h := NewStreamHandler(svc, nil, testLogger())
 
 			req := httptest.NewRequest(http.MethodPost, "/api/srs/callback",
 				strings.NewReader(tt.body))
@@ -163,15 +163,21 @@ func TestSRSOnPublish(t *testing.T) {
 		wantCode  int
 	}{
 		{
-			name:     "happy path",
+			name:     "happy path — stream field (standard OBS)",
+			body:     `{"action":"on_publish","client_id":1,"stream":"sk-abc","ip":"192.168.1.100","vhost":"__defaultVhost__","app":"live","param":""}`,
+			secret:   "valid-secret",
+			wantCode: http.StatusOK,
+		},
+		{
+			name:     "happy path — param fallback (legacy)",
 			body:     `{"action":"on_publish","client_id":1,"param":"?key=sk-abc"}`,
 			secret:   "valid-secret",
 			wantCode: http.StatusOK,
 		},
 		{
 			name:   "invalid srs secret",
-			body:   `{"action":"on_publish","client_id":1,"param":"?key=sk-abc"}`,
-			secret: "",
+			body:   `{"action":"on_publish","client_id":1,"stream":"sk-abc"}`,
+			secret: "bad-secret",
 			setupMock: func(m *mockStreamService) {
 				m.verifySRSSecretFn = func(secret string) error {
 					return errs.Forbidden("invalid srs secret")
@@ -187,7 +193,7 @@ func TestSRSOnPublish(t *testing.T) {
 		},
 		{
 			name:   "on stream start error",
-			body:   `{"action":"on_publish","client_id":1,"param":"?key=bad-key"}`,
+			body:   `{"action":"on_publish","client_id":1,"stream":"bad-key"}`,
 			secret: "valid-secret",
 			setupMock: func(m *mockStreamService) {
 				m.onStreamStartFn = func(ctx context.Context, rawKey string, srsClientID int, title string) (*domain.Stream, error) {
@@ -204,7 +210,7 @@ func TestSRSOnPublish(t *testing.T) {
 			if tt.setupMock != nil {
 				tt.setupMock(svc)
 			}
-			h := NewStreamHandler(svc, testLogger())
+			h := NewStreamHandler(svc, nil, testLogger())
 
 			u := "/api/srs/callback?secret=" + tt.secret
 			req := httptest.NewRequest(http.MethodPost, u,
@@ -241,7 +247,7 @@ func TestSRSOnUnpublish(t *testing.T) {
 		{
 			name:   "invalid srs secret",
 			body:   `{"action":"on_unpublish","client_id":1}`,
-			secret: "",
+			secret: "bad-secret",
 			setupMock: func(m *mockStreamService) {
 				m.verifySRSSecretFn = func(secret string) error {
 					return errs.Forbidden("invalid srs secret")
@@ -274,7 +280,7 @@ func TestSRSOnUnpublish(t *testing.T) {
 			if tt.setupMock != nil {
 				tt.setupMock(svc)
 			}
-			h := NewStreamHandler(svc, testLogger())
+			h := NewStreamHandler(svc, nil, testLogger())
 
 			u := "/api/srs/callback?secret=" + tt.secret
 			req := httptest.NewRequest(http.MethodPost, u,
@@ -325,7 +331,7 @@ func TestListLiveStreams(t *testing.T) {
 			if tt.setupMock != nil {
 				tt.setupMock(svc)
 			}
-			h := NewStreamHandler(svc, testLogger())
+			h := NewStreamHandler(svc, nil, testLogger())
 
 			req := httptest.NewRequest(http.MethodGet, "/api/streams/live", nil)
 			rec := httptest.NewRecorder()
@@ -382,7 +388,7 @@ func TestGetChannelInfo(t *testing.T) {
 			if tt.setupMock != nil {
 				tt.setupMock(svc)
 			}
-			h := NewStreamHandler(svc, testLogger())
+			h := NewStreamHandler(svc, nil, testLogger())
 
 			req := httptest.NewRequest(http.MethodGet, "/api/channel/"+tt.userID, nil)
 			if tt.userID != "" {
@@ -453,7 +459,7 @@ func TestViewerHeartbeat(t *testing.T) {
 			if tt.setupMock != nil {
 				tt.setupMock(svc)
 			}
-			h := NewStreamHandler(svc, testLogger())
+			h := NewStreamHandler(svc, nil, testLogger())
 
 			u := "/api/streams/" + tt.streamID + "/viewer-heartbeat"
 			req := httptest.NewRequest(http.MethodPost, u,
@@ -506,7 +512,7 @@ func TestListLiveStreams_Shape(t *testing.T) {
 			if tt.setupMock != nil {
 				tt.setupMock(svc)
 			}
-			h := NewStreamHandler(svc, testLogger())
+			h := NewStreamHandler(svc, nil, testLogger())
 
 			req := httptest.NewRequest(http.MethodGet, "/api/streams/live", nil)
 			rec := httptest.NewRecorder()

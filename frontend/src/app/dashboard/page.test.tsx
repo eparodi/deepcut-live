@@ -6,7 +6,18 @@ import { render, screen, waitFor } from "@testing-library/react";
 vi.mock("@/lib/api", () => ({
   getMe: vi.fn(),
   getAnalytics: vi.fn(),
-  regenerateStreamKey: vi.fn(),
+  getChannel: vi.fn().mockResolvedValue({
+    userId: "test",
+    streamerName: "Test",
+    streamerAvatarUrl: "https://example.com/avatar.jpg",
+    streamTitle: "Stream",
+    streamCategory: null,
+    isLive: false,
+    viewerCount: 0,
+    hlsUrl: null,
+    startedAt: null,
+    streamId: null,
+  }),
 }));
 
 vi.mock("@/components/ui/Toast", () => ({
@@ -16,7 +27,7 @@ vi.mock("@/components/ui/Toast", () => ({
   })),
 }));
 
-import { getMe, getAnalytics, regenerateStreamKey } from "@/lib/api";
+import { getMe, getAnalytics } from "@/lib/api";
 import DashboardPage from "./page";
 import type { User, Analytics } from "@/types";
 
@@ -31,11 +42,6 @@ const mockUser: User = {
   streamTitle: "My Stream",
   streamCategory: "Gaming",
   isLive: false,
-};
-
-const mockUserNoKey: User = {
-  ...mockUser,
-  streamKey: undefined,
 };
 
 const mockAnalytics: Analytics = {
@@ -101,34 +107,6 @@ describe("DashboardPage", () => {
         screen.getByText("Analytics (This Week)")
       ).toBeInTheDocument();
     });
-  });
-
-  it("auto-generates stream key when user has none", async () => {
-    vi.mocked(getMe).mockResolvedValue(mockUserNoKey);
-    vi.mocked(getAnalytics).mockResolvedValue(mockAnalytics);
-    vi.mocked(regenerateStreamKey).mockResolvedValue({
-      streamKey: "sk_auto_generated",
-    });
-
-    render(<DashboardPage />);
-
-    await waitFor(() => {
-      expect(regenerateStreamKey).toHaveBeenCalled();
-    });
-  });
-
-  it("does NOT auto-generate key when user already has one", async () => {
-    vi.mocked(getMe).mockResolvedValue(mockUser);
-    vi.mocked(getAnalytics).mockResolvedValue(mockAnalytics);
-
-    render(<DashboardPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText("Dashboard")).toBeInTheDocument();
-    });
-
-    // regenerateStreamKey should NOT have been called
-    expect(regenerateStreamKey).not.toHaveBeenCalled();
   });
 
   it("shows error state when API fails", async () => {

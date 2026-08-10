@@ -6,7 +6,7 @@ import (
 )
 
 type StreamRepository interface {
-	CreateStream(ctx context.Context, userID string, title *string, srsClientID int) (*Stream, error)
+	CreateStream(ctx context.Context, userID string, title *string, srsClientID int, hlsPath string) (*Stream, error)
 	EndStream(ctx context.Context, streamID string, hlsPath, recordingPath string, durationSeconds int) error
 	UpdateStreamStatus(ctx context.Context, streamID, status string) error
 	GetStreamByUserID(ctx context.Context, userID string) (*Stream, error)

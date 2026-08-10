@@ -73,7 +73,7 @@ const baseChannel: ChannelResponse = {
   viewerCount: 1234,
   hlsUrl: "https://example.com/stream.m3u8",
   startedAt: "2026-01-01T00:00:00Z",
-  streamId: "stream-1",
+  streamId: "stream-1", thumbnailUrl: null,
 };
 
 // ── Tests ──────────────────────────────────────────────────────
@@ -131,7 +131,7 @@ describe("ChannelPage", () => {
     mockTokenCookie(null);
     const channelWithoutHls: ChannelResponse = {
       ...baseChannel,
-      hlsUrl: null,
+      hlsUrl: null, thumbnailUrl: null,
       isLive: true,
     };
     vi.mocked(getChannel).mockResolvedValue(channelWithoutHls);
@@ -148,7 +148,7 @@ describe("ChannelPage", () => {
     mockTokenCookie(null);
     const offlineChannel: ChannelResponse = {
       ...baseChannel,
-      hlsUrl: null,
+      hlsUrl: null, thumbnailUrl: null,
       isLive: false,
     };
     vi.mocked(getChannel).mockResolvedValue(offlineChannel);

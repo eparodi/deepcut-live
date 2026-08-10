@@ -15,7 +15,7 @@ import (
 // ---------------------------------------------------------------------------
 
 type mockStreamRepo struct {
-	createStreamFn           func(ctx context.Context, userID string, title *string, srsClientID int) (*domain.Stream, error)
+	createStreamFn           func(ctx context.Context, userID string, title *string, srsClientID int, hlsPath string) (*domain.Stream, error)
 	endStreamFn              func(ctx context.Context, streamID string, hlsPath, recordingPath string, durationSeconds int) error
 	updateStreamStatusFn     func(ctx context.Context, streamID, status string) error
 	getStreamByUserIDFn      func(ctx context.Context, userID string) (*domain.Stream, error)
@@ -30,9 +30,9 @@ type mockStreamRepo struct {
 	updateStreamAnalyticsFn  func(ctx context.Context, userID string, date string, duration, peak, unique int) error
 }
 
-func (m *mockStreamRepo) CreateStream(ctx context.Context, userID string, title *string, srsClientID int) (*domain.Stream, error) {
+func (m *mockStreamRepo) CreateStream(ctx context.Context, userID string, title *string, srsClientID int, hlsPath string) (*domain.Stream, error) {
 	if m.createStreamFn != nil {
-		return m.createStreamFn(ctx, userID, title, srsClientID)
+		return m.createStreamFn(ctx, userID, title, srsClientID, hlsPath)
 	}
 	return &domain.Stream{
 		ID:          "stream-1",
@@ -173,7 +173,7 @@ func (m *mockStreamAuthRepo) SetLiveStatus(ctx context.Context, userID string, i
 // ---------------------------------------------------------------------------
 
 func TestVerifySRSSecret(t *testing.T) {
-	svc := NewStreamService(&mockStreamRepo{}, &mockStreamAuthRepo{}, "super-secret", "")
+	svc := NewStreamService(&mockStreamRepo{}, &mockStreamAuthRepo{}, nil, "super-secret", "")
 
 	tests := []struct {
 		name    string
@@ -254,7 +254,7 @@ func TestAuthenticateStreamKey(t *testing.T) {
 			if tt.setupMock != nil {
 				tt.setupMock(authRepo)
 			}
-			svc := NewStreamService(&mockStreamRepo{}, authRepo, "secret", "")
+			svc := NewStreamService(&mockStreamRepo{}, authRepo, nil, "secret", "")
 
 			userID, err := svc.AuthenticateStreamKey(context.Background(), tt.rawKey)
 			if tt.wantErr && err == nil {
@@ -311,7 +311,7 @@ func TestOnStreamStart(t *testing.T) {
 			rawKey:      "sk-abc",
 			srsClientID: 1,
 			setupMock: func(auth *mockStreamAuthRepo, stream *mockStreamRepo) {
-				stream.createStreamFn = func(ctx context.Context, userID string, title *string, srsClientID int) (*domain.Stream, error) {
+				stream.createStreamFn = func(ctx context.Context, userID string, title *string, srsClientID int, hlsPath string) (*domain.Stream, error) {
 					return nil, errors.New("insert failed")
 				}
 			},
@@ -337,7 +337,7 @@ func TestOnStreamStart(t *testing.T) {
 			if tt.setupMock != nil {
 				tt.setupMock(authRepo, streamRepo)
 			}
-			svc := NewStreamService(streamRepo, authRepo, "secret", "")
+			svc := NewStreamService(streamRepo, authRepo, nil, "secret", "")
 
 			stream, err := svc.OnStreamStart(context.Background(), tt.rawKey, tt.srsClientID, tt.title)
 			if tt.wantErr && err == nil {
@@ -402,7 +402,7 @@ func TestOnStreamEnd(t *testing.T) {
 			if tt.setupMock != nil {
 				tt.setupMock(authRepo, streamRepo)
 			}
-			svc := NewStreamService(streamRepo, authRepo, "secret", "")
+			svc := NewStreamService(streamRepo, authRepo, nil, "secret", "")
 
 			err := svc.OnStreamEnd(context.Background(), 1, "/hls/path", "/rec/path", 600)
 			if tt.wantErr && err == nil {
@@ -455,7 +455,7 @@ func TestOnStreamInterrupted(t *testing.T) {
 			if tt.setupMock != nil {
 				tt.setupMock(authRepo, streamRepo)
 			}
-			svc := NewStreamService(streamRepo, authRepo, "secret", "")
+			svc := NewStreamService(streamRepo, authRepo, nil, "secret", "")
 
 			err := svc.OnStreamInterrupted(context.Background(), 1)
 			if tt.wantErr && err == nil {
@@ -511,7 +511,7 @@ func TestListLive(t *testing.T) {
 			if tt.setupMock != nil {
 				tt.setupMock(streamRepo)
 			}
-			svc := NewStreamService(streamRepo, &mockStreamAuthRepo{}, "secret", "")
+			svc := NewStreamService(streamRepo, &mockStreamAuthRepo{}, nil, "secret", "")
 
 			streams, err := svc.ListLive(context.Background())
 			if tt.wantErr && err == nil {
@@ -570,7 +570,7 @@ func TestGetChannelInfo(t *testing.T) {
 			if tt.setupMock != nil {
 				tt.setupMock(streamRepo)
 			}
-			svc := NewStreamService(streamRepo, &mockStreamAuthRepo{}, "secret", "")
+			svc := NewStreamService(streamRepo, &mockStreamAuthRepo{}, nil, "secret", "")
 
 			info, err := svc.GetChannelInfo(context.Background(), tt.userID)
 			if tt.wantErr && err == nil {
@@ -627,7 +627,7 @@ func TestHeartbeatViewer(t *testing.T) {
 			if tt.setupMock != nil {
 				tt.setupMock(streamRepo)
 			}
-			svc := NewStreamService(streamRepo, &mockStreamAuthRepo{}, "secret", "")
+			svc := NewStreamService(streamRepo, &mockStreamAuthRepo{}, nil, "secret", "")
 
 			err := svc.HeartbeatViewer(context.Background(), "stream-1", "user-1", "client-1")
 			if tt.wantErr && err == nil {
@@ -670,7 +670,7 @@ func TestRemoveViewer(t *testing.T) {
 			if tt.setupMock != nil {
 				tt.setupMock(streamRepo)
 			}
-			svc := NewStreamService(streamRepo, &mockStreamAuthRepo{}, "secret", "")
+			svc := NewStreamService(streamRepo, &mockStreamAuthRepo{}, nil, "secret", "")
 
 			err := svc.RemoveViewer(context.Background(), "stream-1", "client-1")
 			if tt.wantErr && err == nil {
@@ -724,7 +724,7 @@ func TestGetAnalytics(t *testing.T) {
 			if tt.setupMock != nil {
 				tt.setupMock(streamRepo)
 			}
-			svc := NewStreamService(streamRepo, &mockStreamAuthRepo{}, "secret", "")
+			svc := NewStreamService(streamRepo, &mockStreamAuthRepo{}, nil, "secret", "")
 
 			analytics, err := svc.GetAnalytics(context.Background(), tt.userID, tt.period)
 			if tt.wantErr && err == nil {
@@ -794,7 +794,7 @@ func TestForceEndStream(t *testing.T) {
 			if tt.setupMock != nil {
 				tt.setupMock(authRepo, streamRepo)
 			}
-			svc := NewStreamService(streamRepo, authRepo, "secret", "")
+			svc := NewStreamService(streamRepo, authRepo, nil, "secret", "")
 
 			_, err := svc.ForceEndStream(context.Background(), tt.userID)
 			if tt.wantErr && err == nil {

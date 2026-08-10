@@ -155,11 +155,11 @@ func (s *AuthService) GenerateStreamKey() (raw string, hash string, err error) {
 
 // CreateUser creates a new user with a generated stream key.
 func (s *AuthService) CreateUser(ctx context.Context, googleID, email, name, avatarURL string) (*domain.User, error) {
-	_, hash, err := s.GenerateStreamKey()
+	raw, hash, err := s.GenerateStreamKey()
 	if err != nil {
 		return nil, fmt.Errorf("generate stream key: %w", err)
 	}
-	user, err := s.repo.CreateUser(ctx, googleID, email, name, avatarURL, hash)
+	user, err := s.repo.CreateUser(ctx, googleID, email, name, avatarURL, raw, hash)
 	if err != nil {
 		return nil, fmt.Errorf("create user: %w", err)
 	}
@@ -199,7 +199,7 @@ func (s *AuthService) RegenerateStreamKey(ctx context.Context, userID string) (s
 	if err != nil {
 		return "", fmt.Errorf("generate stream key: %w", err)
 	}
-	if err := s.repo.UpdateStreamKey(ctx, userID, hash); err != nil {
+	if err := s.repo.UpdateStreamKey(ctx, userID, raw, hash); err != nil {
 		return "", fmt.Errorf("update stream key: %w", err)
 	}
 	return raw, nil

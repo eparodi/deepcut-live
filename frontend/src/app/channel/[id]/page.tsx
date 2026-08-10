@@ -1,10 +1,7 @@
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import { cookies } from "next/headers";
 import { getChannel } from "@/lib/api";
-import { VideoPlayer } from "@/components/VideoPlayer";
-import { StreamInfo } from "@/components/StreamInfo";
-import { ChatPanel } from "@/components/ChatPanel";
+import { ChannelView } from "@/components/ChannelView";
 import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +14,6 @@ export async function generateMetadata({
   params,
 }: ChannelPageProps): Promise<Metadata> {
   const { id } = await params;
-
   try {
     const channel = await getChannel(id);
     return {
@@ -25,19 +21,15 @@ export async function generateMetadata({
       description: `Watch ${channel.streamerName} live on DeepCut`,
     };
   } catch {
-    return {
-      title: "Channel not found — DeepCut",
-    };
+    return { title: "Channel not found — DeepCut" };
   }
 }
 
 export default async function ChannelPage({ params }: ChannelPageProps) {
   const { id } = await params;
 
-  // Check auth status
   const cookieStore = await cookies();
-  const token = cookieStore.get("token");
-  const isSignedIn = !!token;
+  const isSignedIn = !!cookieStore.get("token");
 
   let channel;
   try {
@@ -53,109 +45,5 @@ export default async function ChannelPage({ params }: ChannelPageProps) {
     throw error;
   }
 
-  return (
-    <div className="min-h-full flex flex-col">
-      {/* Main content: video + chat side-by-side on desktop */}
-      <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-6">
-        {/* Back link + streamer context */}
-        <div className="mb-4">
-          <Link
-            href="/"
-            className="text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
-          >
-            ← Browse streams
-          </Link>
-        </div>
-
-        <div className="flex flex-col lg:flex-row gap-6">
-          {/* Video + Stream Info column */}
-          <div className="flex-1 lg:max-w-[70%] space-y-4">
-            {channel.hlsUrl ? (
-              <VideoPlayer
-                hlsUrl={channel.hlsUrl}
-                isLive={channel.isLive}
-              />
-            ) : (
-              <div
-                className="w-full aspect-video rounded-xl flex items-center justify-center"
-                style={{ backgroundColor: "var(--color-surface)" }}
-              >
-                <div className="text-center">
-                  <p className="text-4xl mb-3">📡</p>
-                  <p className="text-lg text-[var(--color-text)] font-medium">
-                    {channel.isLive
-                      ? "Waiting for stream..."
-                      : "Stream is offline"}
-                  </p>
-                  <p className="mt-2 text-sm text-[var(--color-text-muted)]">
-                    {channel.isLive
-                      ? "The streamer hasn't started broadcasting yet"
-                      : "Check out past streams below"}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            <StreamInfo channel={channel} />
-
-            {/* Past VODs link */}
-            <div className="pt-2">
-              <Link
-                href={`/search?q=${encodeURIComponent(channel.streamerName)}`}
-                className="text-sm font-medium hover:underline"
-                style={{ color: "var(--color-primary)" }}
-              >
-                📼 View past streams →
-              </Link>
-            </div>
-          </div>
-
-          {/* Chat panel — desktop side panel */}
-          <aside
-            className="hidden lg:flex lg:flex-col lg:w-[30%] lg:min-w-[300px]"
-            style={{ minHeight: "500px" }}
-          >
-            {channel.streamId ? (
-              <ChatPanel
-                streamId={channel.streamId}
-                isSignedIn={isSignedIn}
-                isStreamEnded={!channel.isLive}
-              />
-            ) : (
-              <div
-                className="flex-1 rounded-xl flex items-center justify-center"
-                style={{ backgroundColor: "var(--color-surface-raised)" }}
-              >
-                <p className="text-sm text-[var(--color-text-muted)] text-center px-4">
-                  Chat unavailable for this channel
-                </p>
-              </div>
-            )}
-          </aside>
-
-          {/* Mobile chat — below video on small screens */}
-          <section className="lg:hidden">
-            {channel.streamId ? (
-              <div style={{ minHeight: "400px", maxHeight: "60vh" }}>
-                <ChatPanel
-                  streamId={channel.streamId}
-                  isSignedIn={isSignedIn}
-                  isStreamEnded={!channel.isLive}
-                />
-              </div>
-            ) : (
-              <div
-                className="rounded-xl p-6 text-center"
-                style={{ backgroundColor: "var(--color-surface-raised)" }}
-              >
-                <p className="text-sm text-[var(--color-text-muted)]">
-                  Chat unavailable for this channel
-                </p>
-              </div>
-            )}
-          </section>
-        </div>
-      </main>
-    </div>
-  );
+  return <ChannelView id={id} initialChannel={channel} isSignedIn={isSignedIn} />;
 }

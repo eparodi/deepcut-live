@@ -20,15 +20,15 @@ func NewStreamRepo(pool *pgxpool.Pool) *StreamRepo {
 	return &StreamRepo{pool: pool}
 }
 
-func (r *StreamRepo) CreateStream(ctx context.Context, userID string, title *string, srsClientID int) (*domain.Stream, error) {
+func (r *StreamRepo) CreateStream(ctx context.Context, userID string, title *string, srsClientID int, hlsPath string) (*domain.Stream, error) {
 	var s domain.Stream
 	err := r.pool.QueryRow(ctx, `
-		INSERT INTO streams (user_id, title, status, srs_client_id)
-		VALUES ($1, $2, 'live', $3)
+		INSERT INTO streams (user_id, title, status, srs_client_id, hls_path)
+		VALUES ($1, $2, 'live', $3, $4)
 		RETURNING id, user_id, title, started_at, ended_at, status,
 		          hls_path, recording_path, recording_status,
 		          peak_viewers, total_viewers, duration_seconds, srs_client_id, created_at`,
-		userID, title, srsClientID,
+		userID, title, srsClientID, hlsPath,
 	).Scan(
 		&s.ID, &s.UserID, &s.Title, &s.StartedAt, &s.EndedAt, &s.Status,
 		&s.HLSPath, &s.RecordingPath, &s.RecordingStatus,

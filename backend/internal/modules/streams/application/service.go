@@ -17,15 +17,17 @@ import (
 type StreamService struct {
 	repo      domain.StreamRepository
 	authRepo  domain.AuthRepo
+	hub       *StreamHub
 	srsSecret string
 	srsAPIURL string
 	http      *http.Client
 }
 
-func NewStreamService(repo domain.StreamRepository, authRepo domain.AuthRepo, srsSecret, srsAPIURL string) *StreamService {
+func NewStreamService(repo domain.StreamRepository, authRepo domain.AuthRepo, hub *StreamHub, srsSecret, srsAPIURL string) *StreamService {
 	return &StreamService{
 		repo:      repo,
 		authRepo:  authRepo,
+		hub:       hub,
 		srsSecret: srsSecret,
 		srsAPIURL: srsAPIURL,
 		http: &http.Client{
@@ -65,13 +67,22 @@ func (s *StreamService) OnStreamStart(ctx context.Context, rawKey string, srsCli
 		t = &title
 	}
 
-	stream, err := s.repo.CreateStream(ctx, userID, t, srsClientID)
+	// Construct the HLS playlist URL. SRS writes HLS files by default to
+	// ./objs/nginx/html/[app]/[stream].m3u8, served on port 8080.
+	// The frontend proxies /hls/* to SRS:8080, stripping the prefix.
+	hlsPath := "/hls/live/" + rawKey + ".m3u8"
+
+	stream, err := s.repo.CreateStream(ctx, userID, t, srsClientID, hlsPath)
 	if err != nil {
 		return nil, fmt.Errorf("on stream start: %w", err)
 	}
 
 	if err := s.authRepo.SetLiveStatus(ctx, userID, true); err != nil {
 		return nil, fmt.Errorf("set live status: %w", err)
+	}
+
+	if s.hub != nil {
+		s.hub.NotifyStreamStarted(userID, stream.ID)
 	}
 
 	return stream, nil
@@ -90,6 +101,10 @@ func (s *StreamService) OnStreamEnd(ctx context.Context, srsClientID int, hlsPat
 
 	if err := s.authRepo.SetLiveStatus(ctx, stream.UserID, false); err != nil {
 		return fmt.Errorf("set live status: %w", err)
+	}
+
+	if s.hub != nil {
+		s.hub.NotifyStreamEnded(stream.UserID)
 	}
 
 	// Update analytics
@@ -113,9 +128,13 @@ func (s *StreamService) OnStreamInterrupted(ctx context.Context, srsClientID int
 	if err := s.authRepo.SetLiveStatus(ctx, stream.UserID, false); err != nil {
 		return fmt.Errorf("set live status: %w", err)
 	}
+	if s.hub != nil {
+		s.hub.NotifyStreamEnded(stream.UserID)
+	}
 	return nil
 }
 
+// OnStreamInterrupted
 // ListLive returns all currently live streams with viewer counts.
 func (s *StreamService) ListLive(ctx context.Context) ([]domain.LiveStream, error) {
 	streams, err := s.repo.ListLiveStreams(ctx)
@@ -189,6 +208,10 @@ func (s *StreamService) ForceEndStream(ctx context.Context, userID string) (stri
 
 	if err := s.authRepo.SetLiveStatus(ctx, userID, false); err != nil {
 		return "", fmt.Errorf("set live status: %w", err)
+	}
+
+	if s.hub != nil {
+		s.hub.NotifyStreamEnded(userID)
 	}
 
 	// Update analytics (same pattern as OnStreamEnd).

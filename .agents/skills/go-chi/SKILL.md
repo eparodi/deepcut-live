@@ -602,6 +602,223 @@ func (s *Store) WithTx(ctx context.Context, fn func(*Queries) error) error {
 | `w.WriteHeader(200)` after `w.Write()` | Set status code BEFORE writing body |
 | Return 200 then write error body | Check errors FIRST, then write success OR error |
 
+## WebSocket (nhooyr.io/websocket)
+
+This project uses **`nhooyr.io/websocket`** — not gorilla/websocket.
+The library is already in `go.mod`. Do NOT introduce gorilla/websocket.
+
+### Hub Pattern — Room-based broadcast
+
+Every WebSocket feature follows this pattern: a **Hub** (singleton, wired
+in `main.go`) manages rooms. Handlers upgrade connections and delegate
+read/write to the hub.
+
+```go
+// domain/entity.go — shared across layers
+type Client struct {
+    UserID string
+    Send   chan []byte  // buffered channel (64 is a safe default)
+}
+```
+
+```go
+// application/hub.go — singleton, safe for concurrent use
+type Hub struct {
+    mu    sync.RWMutex
+    rooms map[string]map[*domain.Client]bool // roomID → clients
+}
+
+func NewHub() *Hub {
+    return &Hub{rooms: make(map[string]map[*domain.Client]bool)}
+}
+
+// Join adds a client to a room. Call from the handler after upgrade.
+func (h *Hub) Join(roomID string, c *domain.Client) {
+    h.mu.Lock()
+    defer h.mu.Unlock()
+    if h.rooms[roomID] == nil {
+        h.rooms[roomID] = make(map[*domain.Client]bool)
+    }
+    h.rooms[roomID][c] = true
+}
+
+// Leave removes a client. Always defer after Join.
+func (h *Hub) Leave(roomID string, c *domain.Client) {
+    h.mu.Lock()
+    defer h.mu.Unlock()
+    delete(h.rooms[roomID], c)
+    if len(h.rooms[roomID]) == 0 {
+        delete(h.rooms, roomID)
+    }
+}
+
+// Broadcast sends a message to every client in a room.
+// Uses non-blocking send: if a client's buffer is full, skip it.
+func (h *Hub) Broadcast(roomID string, data []byte) {
+    h.mu.RLock()
+    defer h.mu.RUnlock()
+    for c := range h.rooms[roomID] {
+        select {
+        case c.Send <- data:
+        default: // client too slow, drop
+        }
+    }
+}
+```
+
+### Handler — Upgrade + read/write pumps
+
+```go
+// adapter/http/handler.go
+import "nhooyr.io/websocket"
+import "nhooyr.io/websocket/wsjson"
+
+func (h *Handler) MyWebSocket(w http.ResponseWriter, r *http.Request) {
+    roomID := chi.URLParam(r, "roomID")
+
+    conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+        InsecureSkipVerify: true, // allow non-browser clients (OBS, scripts)
+    })
+    if err != nil {
+        h.logger.Error("ws accept", "error", err)
+        return
+    }
+    defer conn.Close(websocket.StatusNormalClosure, "")
+
+    client := &domain.Client{
+        UserID: "...", // from auth or query param
+        Send:   make(chan []byte, 64),
+    }
+
+    h.hub.Join(roomID, client)
+    defer h.hub.Leave(roomID, client)
+
+    // Context for the connection lifetime. NOT derived from r.Context().
+    ctx, cancel := context.WithTimeout(context.Background(), 24*time.Hour)
+    defer cancel()
+
+    go h.readPump(ctx, conn, client)
+    h.writePump(ctx, conn, client)
+}
+
+func (h *Handler) readPump(ctx context.Context, conn *websocket.Conn, client *domain.Client) {
+    defer conn.Close(websocket.StatusNormalClosure, "")
+    for {
+        _, msg, err := conn.Read(ctx)
+        if err != nil { break }
+        // process msg, call service, broadcast via hub
+        h.hub.Broadcast(roomID, msg)
+    }
+}
+
+func (h *Handler) writePump(ctx context.Context, conn *websocket.Conn, client *domain.Client) {
+    for {
+        select {
+        case data, ok := <-client.Send:
+            if !ok { return }
+            wsjson.Write(ctx, conn, data) // or conn.Write(ctx, websocket.MessageText, data)
+        case <-ctx.Done():
+            return
+        }
+    }
+}
+```
+
+### DO — WebSocket patterns
+
+- **Always derive a new context** for the connection lifetime. Never pass
+  `r.Context()` into goroutines — the HTTP request context is cancelled
+  when the handler returns.
+  ```go
+  ctx, cancel := context.WithTimeout(context.Background(), 24*time.Hour)
+  defer cancel()
+  ```
+
+- **Buffer the Send channel** (64 is a good default). Unbuffered channels
+  block the broadcaster if a single client is slow.
+  ```go
+  Send: make(chan []byte, 64)
+  ```
+
+- **Non-blocking broadcast.** The `select/default` pattern prevents a slow
+  client from stalling the entire room.
+  ```go
+  select {
+  case c.Send <- data:
+  default: // drop, client will catch up or reconnect
+  }
+  ```
+
+- **Always `defer conn.Close()`** with a status code. `StatusNormalClosure`
+  (1000) for clean shutdown, `StatusInternalError` (1011) for unexpected
+  errors.
+
+- **Use `wsjson.Write`** for structured JSON messages. It's simpler than
+  marshalling manually.
+  ```go
+  wsjson.Write(ctx, conn, myStruct)
+  ```
+
+- **Wire the hub in `main.go`** and pass it to the handler.
+  ```go
+  hub := chatapp.NewChatHub(chatRepo, logger)
+  chatSvc := chatapp.NewChatService(chatRepo, hub)
+  chatHandler := chathttp.NewChatHandler(chatSvc, logger)
+  ```
+
+### DO NOT — WebSocket traps
+
+| ❌ Wrong | ✅ Right |
+|---|---|
+| `import "github.com/gorilla/websocket"` | `import "nhooyr.io/websocket"` |
+| Pass `r.Context()` to WebSocket goroutines | `context.WithTimeout(context.Background(), 24*time.Hour)` |
+| Unbuffered `Send` channel | `make(chan []byte, 64)` |
+| Blocking broadcast (`c.Send <- data`) | Non-blocking `select/default` |
+| `conn.Close()` without status code | `conn.Close(websocket.StatusNormalClosure, "")` |
+| Manually `json.Marshal` then `conn.Write` | `wsjson.Write(ctx, conn, v)` |
+| Skip `InsecureSkipVerify` for local dev | Set `InsecureSkipVerify: true` in dev |
+
+### Testing WebSocket handlers
+
+Use `httptest.NewServer` to test end-to-end:
+
+```go
+func TestWebSocket(t *testing.T) {
+    hub := NewHub()
+    h := NewHandler(hub, testLogger())
+
+    r := chi.NewRouter()
+    r.Get("/ws/{roomID}", h.MyWebSocket)
+    ts := httptest.NewServer(r)
+    defer ts.Close()
+
+    wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws/room-1"
+    conn, _, err := websocket.Dial(context.Background(), wsURL, nil)
+    if err != nil {
+        t.Fatal(err)
+    }
+    defer conn.Close(websocket.StatusNormalClosure, "")
+
+    // Write a message
+    conn.Write(context.Background(), websocket.MessageText, []byte(`{"key":"val"}`))
+
+    // Read the response
+    _, msg, err := conn.Read(context.Background())
+    // ... assertions ...
+}
+```
+
+### Checklist for new WebSocket endpoints
+
+- [ ] Hub is a singleton wired in `main.go` (not created per-request)
+- [ ] `Send` channel is buffered (`make(chan []byte, 64)`)
+- [ ] Broadcast uses non-blocking `select/default`
+- [ ] Context derived from `context.Background()`, not `r.Context()`
+- [ ] `defer conn.Close(websocket.StatusNormalClosure, "")`
+- [ ] `defer hub.Leave(...)` after `hub.Join(...)`
+- [ ] `InsecureSkipVerify: true` in `AcceptOptions` for dev
+- [ ] Test uses `httptest.NewServer` + `websocket.Dial`
+
 ### Pre-Deploy Checklist
 
 Before claiming an endpoint is "stable":

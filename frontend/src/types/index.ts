@@ -72,6 +72,7 @@ export interface ChannelResponse {
   isLive: boolean;
   viewerCount: number;
   hlsUrl: string | null;
+  thumbnailUrl: string | null;
   startedAt: string | null;
   streamId: string | null;
 }
