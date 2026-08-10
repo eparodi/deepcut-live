@@ -378,7 +378,7 @@ export function VideoPlayer({ hlsUrl, isLive, vodId, viewerCount = 0 }: VideoPla
     <div
       ref={containerRef}
       className={`relative w-full aspect-video rounded-xl overflow-hidden bg-black group ${
-        isTheaterMode ? "!w-screen !max-w-none !rounded-none" : ""
+        isTheaterMode ? "!max-w-full" : ""
       }`}
       onMouseMove={resetHideTimer}
       onMouseLeave={() => {
