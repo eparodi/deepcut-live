@@ -1,20 +1,21 @@
-# 2026-08-10 Session Log
+# Session Log — 2026-08-10
 
-## Session: Reduce SRS log noise in Docker console
+## Corrections & Root Causes
 
-### Corrections & Learnings
+| # | Issue | Root Cause | Fix |
+|---|-------|-----------|-----|
+| 1 | WS integration test hanging (SendMessage never called) | `readPump` was doing concurrent writes to WebSocket (`wsjson.Write` for errors/pongs) while `writePump` also wrote — `nhooyr.io/websocket` requires single-writer goroutine | Routed all writes through `client.Send` channel via `sendToClient()` |
+| 2 | WS integration test failing (client.UserID empty) | WS route moved out of auth group; handler extracts auth from cookie/header, but test didn't pass auth credentials | Added `HTTPHeader` with Cookie to `websocket.DialOptions` in test |
+| 3 | Server test build failure | `chathttp.NewChatHandler` signature changed to include `chatAuth` parameter | Added `chatAuthAdapter` to server test and passed it to `NewChatHandler` |
+| 4 | `nil` logger causing panic in handler test error path | Test passed `nil` as logger; error path called `h.logger.Error()` | Used `testLogger()` instead of `nil` |
 
-| # | Event | Root Cause | Fix |
-|---|-------|------------|-----|
-| 1 | SRS poller logged WARN every 5s when SRS unreachable | Poller used global `slog.Warn` without respecting a configured log level | Demoted to DEBUG via instance logger; added LOG_LEVEL env var |
-| 2 | Poller used global `slog` package while rest of codebase uses injected `*slog.Logger` | Pattern inconsistency — StreamService lacked a logger field | Added `*slog.Logger` field to StreamService, updated constructor, added nil-safe log helpers |
+## Questions / Follow-Ups
 
-### Rules to Add/Update
+- [ ] Should `chatAuth.ValidateToken` accept a `context.Context` parameter? Currently uses `context.Background()` — fine for now but could be improved
+- [ ] `wsPingInterval` constant is defined but unused (client sends pings per spec, server doesn't initiate them)
+- [ ] `chatAuthAdapter` is duplicated between `main.go` and `server_test.go` — extract to shared package?
+- [ ] Error comparison `err.Error() == "rate limited"` should use a sentinel error instead of string comparison
 
-- ⬜ go-chi skill: add rule about services always using injected loggers, never global slog
-- ⬜ AGENTS.md: add LOG_LEVEL env var as a standard pattern
-- ⬜ docker-compose: add log rotation as a standard for all services
+## Related Retros
 
-### Follow-ups
-
-- [ ] Consolidate remaining global `slog.Error` calls in `service.go` (lines 113, 220) — `OnStreamEnd` and `ForceEndStream` still use global slog for analytics errors
+- [2026-08-10-chat-review.md](./2026-08-10-chat-review.md)
