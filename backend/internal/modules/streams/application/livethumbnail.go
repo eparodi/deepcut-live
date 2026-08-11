@@ -14,8 +14,8 @@ import (
 // liveThumbnails tracks active thumbnail capture goroutines by stream ID.
 var liveThumbnails sync.Map // map[string]context.CancelFunc
 
-// startLiveThumbnail begins capturing frames from the live HLS stream every 10s.
-// Requires ffmpeg installed in the container. Called from OnStreamStart.
+// startLiveThumbnail begins capturing frames from the live HLS stream.
+// Captures immediately on start, then every 5 seconds. Requires ffmpeg.
 func (s *StreamService) startLiveThumbnail(streamID, streamKey string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	liveThumbnails.Store(streamID, cancel)
@@ -24,14 +24,13 @@ func (s *StreamService) startLiveThumbnail(streamID, streamKey string) {
 	srsHTTP := "http://localhost:8080"
 	if s.srsAPIURL != "" {
 		srsHTTP = strings.Replace(s.srsAPIURL, ":1985", ":8080", 1)
-		// Also handle case where no port is specified
 		if srsHTTP == s.srsAPIURL {
 			srsHTTP = s.srsAPIURL + ":8080"
 		}
 	}
 
 	go func() {
-		ticker := time.NewTicker(10 * time.Second)
+		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
 		defer liveThumbnails.Delete(streamID)
 
@@ -41,10 +40,23 @@ func (s *StreamService) startLiveThumbnail(streamID, streamKey string) {
 			return
 		}
 
-		// SRS Docker image writes HLS to its internal path regardless of config.
-		// The http_server serves from /usr/local/srs/objs/nginx/html/
-		// Accessible at http://srs:8080/live/{key}.m3u8
 		hlsURL := fmt.Sprintf("%s/live/%s.m3u8", srsHTTP, streamKey)
+
+		capture := func() {
+			cmd := exec.CommandContext(ctx, "ffmpeg",
+				"-i", hlsURL,
+				"-vframes", "1",
+				"-q:v", "3",
+				thumbnailPath,
+				"-y",
+			)
+			cmd.Stderr = nil
+			if err := cmd.Run(); err != nil {
+				s.warnLog("live thumbnail capture failed", "err", err, "stream_id", streamID)
+			}
+		}
+
+		capture() // first frame immediately
 
 		for {
 			select {
@@ -52,24 +64,13 @@ func (s *StreamService) startLiveThumbnail(streamID, streamKey string) {
 				os.Remove(thumbnailPath)
 				return
 			case <-ticker.C:
-				cmd := exec.CommandContext(ctx, "ffmpeg",
-					"-i", hlsURL,
-					"-vframes", "1",
-					"-q:v", "3",
-					thumbnailPath,
-					"-y",
-				)
-				cmd.Stderr = nil
-				if err := cmd.Run(); err != nil {
-					s.warnLog("live thumbnail capture failed", "err", err, "stream_id", streamID)
-				}
+				capture()
 			}
 		}
 	}()
 }
 
 // stopLiveThumbnail stops the live thumbnail goroutine for a stream.
-// Called from OnStreamEnd.
 func (s *StreamService) stopLiveThumbnail(streamID string) {
 	if cancel, ok := liveThumbnails.Load(streamID); ok {
 		cancel.(context.CancelFunc)()
