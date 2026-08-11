@@ -1,0 +1,63 @@
+package application
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sync"
+	"time"
+)
+
+// liveThumbnails tracks active thumbnail capture goroutines by stream ID.
+var liveThumbnails sync.Map // map[string]context.CancelFunc
+
+// startLiveThumbnail begins capturing frames from the live HLS stream every 10s.
+// Requires ffmpeg installed in the container. Called from OnStreamStart.
+func (s *StreamService) startLiveThumbnail(streamID, streamKey string) {
+	ctx, cancel := context.WithCancel(context.Background())
+	liveThumbnails.Store(streamID, cancel)
+
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		defer liveThumbnails.Delete(streamID)
+
+		thumbnailPath := filepath.Join("/data/hls/thumbnails/live", streamID+".jpg")
+		if err := os.MkdirAll(filepath.Dir(thumbnailPath), 0o755); err != nil {
+			s.warnLog("live thumbnail: mkdir failed", "err", err)
+			return
+		}
+
+		hlsURL := fmt.Sprintf("http://localhost:8080/__defaultVhost__/live/%s.m3u8", streamKey)
+
+		for {
+			select {
+			case <-ctx.Done():
+				os.Remove(thumbnailPath)
+				return
+			case <-ticker.C:
+				cmd := exec.CommandContext(ctx, "ffmpeg",
+					"-i", hlsURL,
+					"-vframes", "1",
+					"-q:v", "3",
+					thumbnailPath,
+					"-y",
+				)
+				cmd.Stderr = nil
+				if err := cmd.Run(); err != nil {
+					s.warnLog("live thumbnail capture failed", "err", err, "stream_id", streamID)
+				}
+			}
+		}
+	}()
+}
+
+// stopLiveThumbnail stops the live thumbnail goroutine for a stream.
+// Called from OnStreamEnd.
+func (s *StreamService) stopLiveThumbnail(streamID string) {
+	if cancel, ok := liveThumbnails.Load(streamID); ok {
+		cancel.(context.CancelFunc)()
+	}
+}

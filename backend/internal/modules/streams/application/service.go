@@ -88,6 +88,8 @@ func (s *StreamService) OnStreamStart(ctx context.Context, rawKey string, srsCli
 
 	if s.hub != nil {
 		s.hub.NotifyStreamStarted(userID, stream.ID)
+
+	s.startLiveThumbnail(stream.ID, rawKey)
 	}
 
 	return stream, nil
@@ -111,6 +113,8 @@ func (s *StreamService) OnStreamEnd(ctx context.Context, srsClientID int, hlsPat
 
 	if s.hub != nil {
 		s.hub.NotifyStreamEnded(stream.UserID)
+
+	s.stopLiveThumbnail(stream.ID)
 	}
 
 	// Update analytics
@@ -168,6 +172,8 @@ func (s *StreamService) OnStreamInterrupted(ctx context.Context, srsClientID int
 	}
 	if s.hub != nil {
 		s.hub.NotifyStreamEnded(stream.UserID)
+
+	s.stopLiveThumbnail(stream.ID)
 	}
 	return nil
 }

@@ -63,6 +63,16 @@ type StreamStatusEvent struct {
 	StreamID string `json:"streamId,omitempty"` // set on streamStarted
 }
 
+// VODStatusEvent is broadcast when a VOD's recording status changes.
+type VODStatusEvent struct {
+	Type         string `json:"type"` // "vod_status"
+	VodID        string `json:"vodId"`
+	Status       string `json:"status"` // "ready" or "failed"
+	HlsURL       string `json:"hlsUrl,omitempty"`
+	ThumbnailURL string `json:"thumbnailUrl,omitempty"`
+	Error        string `json:"error,omitempty"`
+}
+
 // Analytics holds aggregated streaming statistics.
 type Analytics struct {
 	Period        string `json:"period"`

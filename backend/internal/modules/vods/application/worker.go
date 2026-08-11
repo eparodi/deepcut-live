@@ -2,6 +2,10 @@ package application
 
 import (
 	"context"
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"time"
 	"fmt"
 	"log/slog"
 	"os"
@@ -60,6 +64,7 @@ func (w *VODWorker) Work(ctx context.Context, job *river.Job[voddomain.VODProces
 		return fmt.Errorf("mark ready: %w", err)
 	}
 
+	w.notifyServer(args.StreamID, "ready", "/hls/vods/"+args.StreamID+"/index.m3u8", "/hls/thumbnails/"+args.StreamID+".jpg", "")
 	w.logger.Info("vod processing complete", "stream_id", args.StreamID)
 	return nil
 }
@@ -135,4 +140,42 @@ func (w *VODWorker) markFailed(ctx context.Context, streamID, errorMsg string) e
 		return fmt.Errorf("mark failed: %w", err)
 	}
 	return nil
+}
+
+// notifyServer sends a VOD status update to the main backend server.
+func (w *VODWorker) notifyServer(vodID, status, hlsURL, thumbnailURL, errMsg string) {
+	backendURL := os.Getenv("BACKEND_URL")
+	if backendURL == "" {
+		backendURL = "http://localhost:8081"
+	}
+
+	payload := map[string]string{
+		"vodId":        vodID,
+		"status":       status,
+		"hlsUrl":       hlsURL,
+		"thumbnailUrl": thumbnailURL,
+		"error":        errMsg,
+	}
+	body, _ := json.Marshal(payload)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "POST", backendURL+"/api/internal/vod-status", bytes.NewReader(body))
+	if err != nil {
+		w.logger.Warn("vod status notify: build request failed", "err", err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		w.logger.Warn("vod status notify: request failed", "err", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		w.logger.Warn("vod status notify: unexpected status", "status", resp.StatusCode)
+	}
 }

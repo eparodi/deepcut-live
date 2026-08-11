@@ -77,7 +77,27 @@ func (h *StreamHub) broadcast(userID string, event domain.StreamStatusEvent) {
 		select {
 		case client.Send <- data:
 		default:
-			// Client buffer full, skip (client will poll as fallback)
+		}
+	}
+}
+
+// NotifyVODStatus broadcasts a VOD status change to all connected clients.
+func (h *StreamHub) NotifyVODStatus(event domain.VODStatusEvent) {
+	data, err := json.Marshal(event)
+	if err != nil {
+		h.logger.Error("marshal vod status event", "error", err)
+		return
+	}
+
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	for _, clients := range h.rooms {
+		for client := range clients {
+			select {
+			case client.Send <- data:
+			default:
+			}
 		}
 	}
 }
