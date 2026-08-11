@@ -35,6 +35,9 @@ import (
 	vodapp "github.com/deepcut/live/internal/modules/vods/application"
 	vodriver "github.com/deepcut/live/internal/modules/vods/adapter/river"
 
+	"github.com/riverqueue/river/riverdriver/riverpgxv5"
+	"github.com/riverqueue/river/rivermigrate"
+
 	chathttp "github.com/deepcut/live/internal/modules/chat/adapter/http"
 	chatpg "github.com/deepcut/live/internal/modules/chat/adapter/postgres"
 	chatapp "github.com/deepcut/live/internal/modules/chat/application"
@@ -75,6 +78,14 @@ func main() {
 
 	authSvc := authapp.NewAuthService(authRepo, googleClientID, googleClientSecret, baseURL, privateKeyPEM, publicKeyPEM)
 	streamHub := streamapp.NewStreamHub(logger)
+
+	// Run River schema migration before creating queue
+	migrator, migErr := rivermigrate.New(riverpgxv5.New(pool), nil)
+	if migErr != nil {
+		slog.Warn("river migrator creation failed", "err", migErr)
+	} else if _, migErr := migrator.Migrate(context.Background(), rivermigrate.DirectionUp, nil); migErr != nil {
+		slog.Warn("river migration failed", "err", migErr)
+	}
 	vodQueue, err := vodriver.NewQueue(pool)
 	if err != nil {
 		slog.Warn("vod queue creation failed", "err", err)

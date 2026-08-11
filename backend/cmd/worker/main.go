@@ -11,9 +11,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
+	"github.com/riverqueue/river/rivermigrate"
 
-	voddomain "github.com/deepcut/live/internal/modules/vods/domain"
 	vodapp "github.com/deepcut/live/internal/modules/vods/application"
+	voddomain "github.com/deepcut/live/internal/modules/vods/domain"
 )
 
 func main() {
@@ -30,6 +31,17 @@ func main() {
 		os.Exit(1)
 	}
 	defer pool.Close()
+
+	// Run River schema migration before starting
+	migrator, err := rivermigrate.New(riverpgxv5.New(pool), nil)
+	if err != nil {
+		logger.Error("failed to create river migrator", "err", err)
+		os.Exit(1)
+	}
+	if _, err := migrator.Migrate(context.Background(), rivermigrate.DirectionUp, nil); err != nil {
+		logger.Error("river migration failed", "err", err)
+		os.Exit(1)
+	}
 
 	vodWorker := vodapp.NewVODWorker(pool, logger)
 
