@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -32,23 +33,13 @@ func main() {
 	}
 	defer pool.Close()
 
-	// Run River schema migration before starting (skip if tables already exist)
-	migrator, err := rivermigrate.New(riverpgxv5.New(pool), nil)
-	if err != nil {
-		logger.Error("failed to create river migrator", "err", err)
+	// Run River schema migration before starting.
+	// River tracks applied versions in its own table. If a previous run
+	// crashed mid-migration, we retry — the migrator skips already-applied
+	// versions.
+	if err := migrateRiverSchema(pool, logger); err != nil {
+		logger.Error("river migration failed", "err", err)
 		os.Exit(1)
-	}
-	if _, err := migrator.Migrate(context.Background(), rivermigrate.DirectionUp, nil); err != nil {
-		// Migration may fail if tables were partially created by a previous crash.
-		// Check if the core table exists — if so, migration already ran.
-		var exists bool
-		if scanErr := pool.QueryRow(context.Background(),
-			"SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'river_queue')").Scan(&exists); scanErr == nil && exists {
-			logger.Warn("river migration failed but tables already exist, continuing", "err", err)
-		} else {
-			logger.Error("river migration failed", "err", err)
-			os.Exit(1)
-		}
 	}
 
 	vodWorker := vodapp.NewVODWorker(pool, logger)
@@ -78,4 +69,44 @@ func main() {
 	}
 
 	fmt.Println("worker shut down gracefully")
+}
+
+// migrateRiverSchema runs River migrations, retrying on partial state.
+func migrateRiverSchema(pool *pgxpool.Pool, logger *slog.Logger) error {
+	migrator, err := rivermigrate.New(riverpgxv5.New(pool), nil)
+	if err != nil {
+		return fmt.Errorf("create migrator: %w", err)
+	}
+
+	// Check which versions are already applied.
+	existing, err := migrator.ExistingVersions(context.Background())
+	if err != nil {
+		// If the river_migration table doesn't exist yet, that's fine —
+		// the Migrate call will create it.
+		if !strings.Contains(err.Error(), "does not exist") {
+			return fmt.Errorf("check existing versions: %w", err)
+		}
+		existing = nil
+	}
+
+	logger.Info("river migration check", "already_applied", len(existing))
+
+	// Run migration. The migrator skips already-applied versions.
+	_, err = migrator.Migrate(context.Background(), rivermigrate.DirectionUp, nil)
+	if err != nil {
+		// If tables were partially created by a previous crash,
+		// the migration tracking may be out of sync. Check if the
+		// core table exists — if so, the schema is effectively applied.
+		var exists bool
+		if scanErr := pool.QueryRow(context.Background(),
+			"SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'river_queue')",
+		).Scan(&exists); scanErr == nil && exists {
+			logger.Warn("river schema exists despite migration error, continuing",
+				"migration_err", err)
+			return nil
+		}
+		return fmt.Errorf("migrate: %w", err)
+	}
+
+	return nil
 }
