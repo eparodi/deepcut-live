@@ -1,6 +1,6 @@
 # Browse & VOD Discovery
 
-**Status:** Approved  
+**Status:** Implemented  
 **Owner:** Eliseo  
 **Created:** 2026-08-11
 
@@ -153,20 +153,20 @@ the response so that the search UI has a working data source.
 
 ### Phase 1 — Foundation: Fix API Client & Types (blocker for all VOD tasks)
 
-1. [ ] **Align frontend types with backend VOD responses**
+1. [x] **Align frontend types with backend VOD responses**
    - Files: `frontend/src/types/index.ts`
    - Update `VodItem` to match backend VOD JSON: rename fields (`userName`, `userAvatar`, `recordingStatus`), add missing fields (`userId`, `endedAt`, `peakViewers`, `totalViewers`, `createdAt`), remove unmatched fields (`category`, `thumbnailUrl`)
    - Update `SearchResponse` to match backend `SearchResult`: `{ vods, totalCount, limit, offset }` (replaces current `{ results, total, page }`)
    - Satisfies: US5 AC4 (type alignment)
 
-2. [ ] **Update API client functions**
+2. [x] **Update API client functions**
    - Files: `frontend/src/lib/api.ts`
    - Rewrite `searchVods()`: accept `{ query?, page?, limit?, sort? }` params object, compute `offset = (page - 1) * limit`, call `GET /api/vods?q=...&sort=...&limit=...&offset=...`, return `SearchResponse` directly
    - Add `getRecentVods(limit = 8)`: calls `GET /api/vods?sort=recent&limit=N`, returns `SearchResponse`
    - Remove old `searchVods(query, page, limit)` signature
    - Satisfies: US5 AC1, AC2, AC3, AC5
 
-3. [ ] **Update existing call sites for changed types/APIs**
+3. [x] **Update existing call sites for changed types/APIs**
    - Files: any files referencing old `VodItem` fields or old `searchVods()` signature
    - grep for `searchVods(`, `VodItem`, `category` on VodItem, `thumbnailUrl` on VodItem, `streamerName`, `streamerAvatarUrl`, `status` on VodItem
    - Fix all compilation errors from type changes
@@ -174,7 +174,7 @@ the response so that the search UI has a working data source.
 
 ### Phase 2 — Core Components (can run in parallel after Phase 1)
 
-4. [ ] [P] **Create VodCard component**
+4. [x] [P] **Create VodCard component**
    - Files: `frontend/src/components/VodCard.tsx`, `frontend/src/components/VodCard.test.tsx`
    - Renders thumbnail placeholder (🎬), title (fallback: "Untitled stream"), streamer avatar + name, formatted duration (`1h 23m`), relative date ("3 days ago")
    - Status badge overlay: "Processing" or "Unavailable" based on `recordingStatus`
@@ -182,7 +182,7 @@ the response so that the search UI has a working data source.
    - Tests: renders with data, renders fallback for missing title, renders processing badge, renders failed badge, formats duration correctly
    - Satisfies: US1 AC1 (cards displayed), US3 AC2 (search result cards), US3 AC5 (click → VOD page)
 
-5. [ ] [P] **Add sort control to LiveGrid**
+5. [x] [P] **Add sort control to LiveGrid**
    - Files: `frontend/src/components/LiveGrid.tsx`, `frontend/src/components/LiveGrid.test.tsx`
    - Add "Viewers" | "Recent" segmented button in section header
    - Read initial sort from `useSearchParams()` → `?sort=` (default: `viewers`)
@@ -193,7 +193,7 @@ the response so that the search UI has a working data source.
 
 ### Phase 3 — Pages
 
-6. [ ] **Show recent VODs on empty homepage (US1)**
+6. [x] **Show recent VODs on empty homepage (US1)**
    - Files: `frontend/src/app/page.tsx`, `frontend/src/app/page.test.tsx`
    - When `streams.length === 0`, fetch `getRecentVods(8)`
    - Render "📼 Recent Past Streams" section with VodCard grid below the empty live state
@@ -201,7 +201,7 @@ the response so that the search UI has a working data source.
    - Tests: renders VodCards when no live streams, does NOT render VOD section when live streams exist, does NOT render VOD section when no live streams AND no VODs
    - Satisfies: US1 AC1, AC2, AC3, AC4
 
-7. [ ] **Create /search page (US3)**
+7. [x] **Create /search page (US3)**
    - Files: `frontend/src/app/search/page.tsx`, `frontend/src/app/search/page.test.tsx`
    - Search input + submit button (or Enter key)
    - States: empty (before search), loading, results grid, no results, error
@@ -211,7 +211,7 @@ the response so that the search UI has a working data source.
    - Tests: renders empty state, search returns results, "Load more" pagination, no results message, error state with retry, pre-fills from ?q= param
    - Satisfies: US3 AC1, AC2, AC3, AC4, AC6, AC7
 
-8. [ ] **Create /vods/[id] page (US4)**
+8. [x] **Create /vods/[id] page (US4)**
    - Files: `frontend/src/app/vods/[id]/page.tsx`, `frontend/src/app/vods/[id]/page.test.tsx`
    - Fetch VOD detail from `GET /api/vods/{vodID}`
    - States: ready (player + chat), processing (message), failed (message), not found (404 page), error (retry)
@@ -224,12 +224,12 @@ the response so that the search UI has a working data source.
 
 ### Phase 4 — Polish & Verify
 
-9. [ ] **Update all links pointing to old /search path**
+9. [x] **Update all links pointing to old /search path**
    - Files: `LiveGrid.tsx`, `ChannelView.tsx`
    - Verify "Browse past streams" and "📼 View past streams →" links go to `/search` (path is unchanged but verify they work with the new page)
    - Update any hardcoded `/search?q=...` links to ensure proper encoding
 
-10. [ ] **Full build + lint + test suite**
+10. [x] **Full build + lint + test suite**
     - Run `npx tsc --noEmit` → zero type errors
     - Run `npm run lint` → zero warnings
     - Run `npm test` → all tests pass
