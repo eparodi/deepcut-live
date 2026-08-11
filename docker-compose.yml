@@ -24,6 +24,26 @@ services:
         condition: service_healthy
     volumes:
       - ./data/hls:/data/hls
+      - ./data/recordings:/data/recordings
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      DATABASE_URL: postgres://live:live@postgres:5432/live?sslmode=disable
+      VOD_ENCODING_PRESET: copy
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./data/hls:/data/hls
+      - ./data/recordings:/data/recordings
 
   postgres:
     image: postgres:16-alpine
@@ -49,6 +69,7 @@ services:
     volumes:
       - ./data/srs.conf:/usr/local/srs/conf/srs.conf
       - ./data/hls:/data/hls
+      - ./data/recordings:/data/recordings
     logging:
       driver: "json-file"
       options:
