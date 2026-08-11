@@ -86,6 +86,7 @@ func (s *StreamService) pollSRS(ctx context.Context, seen map[string]bool) {
 		}
 
 		s.hub.NotifyStreamStarted(userID, stream.ID)
+		s.startLiveThumbnail(stream.ID, c.Name)
 		seen[c.Name] = true
 		s.infoLog("srs poller: stream started", "stream_id", stream.ID, "user_id", userID)
 	}
@@ -105,6 +106,7 @@ func (s *StreamService) pollSRS(ctx context.Context, seen map[string]bool) {
 						s.errorLog("srs poller: set live status failed", "err", statusErr, "user_id", userID)
 					}
 					s.hub.NotifyStreamEnded(userID)
+					s.stopLiveThumbnail(stream.ID)
 					s.infoLog("srs poller: stream ended", "user_id", userID)
 				}
 			}
