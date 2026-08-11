@@ -112,6 +112,7 @@ func (s *StreamService) pollSRS(ctx context.Context, seen map[string]bool) {
 					}
 					s.hub.NotifyStreamEnded(userID)
 					s.stopLiveThumbnail(stream.ID)
+					s.handleRecording(ctx, stream.ID, "")
 					s.infoLog("srs poller: stream ended", "user_id", userID)
 				}
 			}
