@@ -32,15 +32,23 @@ func main() {
 	}
 	defer pool.Close()
 
-	// Run River schema migration before starting
+	// Run River schema migration before starting (skip if tables already exist)
 	migrator, err := rivermigrate.New(riverpgxv5.New(pool), nil)
 	if err != nil {
 		logger.Error("failed to create river migrator", "err", err)
 		os.Exit(1)
 	}
 	if _, err := migrator.Migrate(context.Background(), rivermigrate.DirectionUp, nil); err != nil {
-		logger.Error("river migration failed", "err", err)
-		os.Exit(1)
+		// Migration may fail if tables were partially created by a previous crash.
+		// Check if the core table exists — if so, migration already ran.
+		var exists bool
+		if scanErr := pool.QueryRow(context.Background(),
+			"SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'river_queue')").Scan(&exists); scanErr == nil && exists {
+			logger.Warn("river migration failed but tables already exist, continuing", "err", err)
+		} else {
+			logger.Error("river migration failed", "err", err)
+			os.Exit(1)
+		}
 	}
 
 	vodWorker := vodapp.NewVODWorker(pool, logger)
