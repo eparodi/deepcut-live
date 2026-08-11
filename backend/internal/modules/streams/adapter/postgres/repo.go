@@ -166,6 +166,8 @@ func (r *StreamRepo) ListLiveStreams(ctx context.Context) ([]domain.LiveStream, 
 			return nil, fmt.Errorf("scan live stream: %w", err)
 		}
 		ls.StartedAt = startedAt.Format("2006-01-02T15:04:05Z")
+		thumbnailPath := "/hls/thumbnails/live/" + ls.StreamID + ".jpg"
+		ls.ThumbnailUrl = &thumbnailPath
 		result = append(result, ls)
 	}
 	if err := rows.Err(); err != nil {
@@ -215,6 +217,8 @@ func (r *StreamRepo) GetChannelInfo(ctx context.Context, userID string) (*domain
 	}
 	if streamID != "" {
 		info.StreamID = &streamID
+		thumbnailPath := "/hls/thumbnails/live/" + streamID + ".jpg"
+		info.ThumbnailUrl = &thumbnailPath
 	}
 	return &info, nil
 }

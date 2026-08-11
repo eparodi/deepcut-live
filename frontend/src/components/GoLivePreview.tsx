@@ -35,11 +35,7 @@ export function GoLivePreview({ userId, isLive }: GoLivePreviewProps) {
     return () => clearInterval(interval);
   }, [isLive, fetchChannel]);
 
-  // The backend currently serializes the HLS path as `thumbnailUrl`.
-  // We also check `hlsUrl` for forward-compatibility if the backend is updated.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const raw = channel as any;
-  const hlsUrl = (raw?.hlsUrl || raw?.thumbnailUrl) as string | null | undefined;
+  const hlsUrl = channel?.hlsUrl ?? null;
 
   return (
     <section aria-labelledby="go-live-heading">

@@ -21,20 +21,17 @@ type Stream struct {
 }
 
 // LiveStream combines a stream with its channel owner info for the public live list.
-//
-// NOTE: HlsPath is mapped to json:"thumbnailUrl" as a pragmatic stopgap.
-// The hls_path column is the HLS playlist URL, not a thumbnail image.
-// A proper thumbnail generation pipeline should be added in a future spec.
 type LiveStream struct {
-	StreamID    string  `json:"streamId"`
-	UserID      string  `json:"userId"`
-	UserName    string  `json:"streamerName"`
-	UserAvatar  *string `json:"streamerAvatarUrl"`
-	Title       *string `json:"title"`
-	Category    *string `json:"category"`
-	StartedAt   string  `json:"startedAt"`
-	HlsPath     *string `json:"thumbnailUrl"`
-	ViewerCount int     `json:"viewerCount"`
+	StreamID     string  `json:"streamId"`
+	UserID       string  `json:"userId"`
+	UserName     string  `json:"streamerName"`
+	UserAvatar   *string `json:"streamerAvatarUrl"`
+	Title        *string `json:"title"`
+	Category     *string `json:"category"`
+	StartedAt    string  `json:"startedAt"`
+	HlsPath      *string `json:"-"`
+	ThumbnailUrl *string `json:"thumbnailUrl"`
+	ViewerCount  int     `json:"viewerCount"`
 }
 
 // ChannelInfo provides public-facing channel/profile information.
@@ -47,7 +44,8 @@ type ChannelInfo struct {
 	IsLive         bool    `json:"isLive"`
 	StreamID       *string `json:"streamId"`
 	StartedAt      *string `json:"startedAt,omitempty"`
-	HlsPath        *string `json:"thumbnailUrl,omitempty"`
+	HlsPath        *string `json:"hlsUrl,omitempty"`
+	ThumbnailUrl   *string `json:"thumbnailUrl,omitempty"`
 	ViewerCount    int     `json:"viewerCount"`
 }
 
