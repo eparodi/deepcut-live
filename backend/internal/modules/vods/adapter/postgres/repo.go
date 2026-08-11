@@ -135,7 +135,6 @@ func (r *VODRepo) SearchVODs(ctx context.Context, params domain.SearchParams) (*
 	}, nil
 }
 
-
 func (r *VODRepo) IncrementViewCount(ctx context.Context, vodID string) error {
 	_, err := r.pool.Exec(ctx, `UPDATE streams SET total_viewers = total_viewers + 1, peak_viewers = GREATEST(peak_viewers, total_viewers + 1) WHERE id = $1`, vodID)
 	if err != nil {

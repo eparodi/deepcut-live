@@ -122,8 +122,10 @@ export interface VodDetail {
   startedAt: string;
   durationSeconds: number;
   hlsUrl: string | null;
+  thumbnailUrl: string | null;
   viewerCount: number;
-  status: "ready" | "processing" | "failed";
+  recordingStatus: "pending" | "processing" | "ready" | "failed";
+  recordingError: string | null;
   message?: string;
 }
 
