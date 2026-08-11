@@ -33,6 +33,7 @@ import (
 	vodhttp "github.com/deepcut/live/internal/modules/vods/adapter/http"
 	vodpg "github.com/deepcut/live/internal/modules/vods/adapter/postgres"
 	vodapp "github.com/deepcut/live/internal/modules/vods/application"
+	vodriver "github.com/deepcut/live/internal/modules/vods/adapter/river"
 
 	chathttp "github.com/deepcut/live/internal/modules/chat/adapter/http"
 	chatpg "github.com/deepcut/live/internal/modules/chat/adapter/postgres"
@@ -74,7 +75,12 @@ func main() {
 
 	authSvc := authapp.NewAuthService(authRepo, googleClientID, googleClientSecret, baseURL, privateKeyPEM, publicKeyPEM)
 	streamHub := streamapp.NewStreamHub(logger)
-	streamSvc := streamapp.NewStreamService(streamRepo, authRepo, streamHub, srsSecret, srsAPIURL, logger)
+	vodQueue, err := vodriver.NewQueue(pool)
+	if err != nil {
+		slog.Warn("vod queue creation failed", "err", err)
+		vodQueue = nil
+	}
+	streamSvc := streamapp.NewStreamService(streamRepo, authRepo, streamHub, vodQueue, srsSecret, srsAPIURL, logger)
 	vodSvc := vodapp.NewVODService(vodRepo)
 	chatHub := chatapp.NewChatHub(chatRepo, logger)
 	chatSvc := chatapp.NewChatService(chatRepo, chatHub)

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/deepcut/live/internal/modules/streams/domain"
+	voddomain "github.com/deepcut/live/internal/modules/vods/domain"
 	"github.com/deepcut/live/internal/shared/errs"
 )
 
@@ -18,17 +19,19 @@ type StreamService struct {
 	repo      domain.StreamRepository
 	authRepo  domain.AuthRepo
 	hub       *StreamHub
+	vodQueue  voddomain.VODQueue
 	srsSecret string
 	srsAPIURL string
 	http      *http.Client
 	logger    *slog.Logger
 }
 
-func NewStreamService(repo domain.StreamRepository, authRepo domain.AuthRepo, hub *StreamHub, srsSecret, srsAPIURL string, logger *slog.Logger) *StreamService {
+func NewStreamService(repo domain.StreamRepository, authRepo domain.AuthRepo, hub *StreamHub, vodQueue voddomain.VODQueue, srsSecret, srsAPIURL string, logger *slog.Logger) *StreamService {
 	return &StreamService{
 		repo:      repo,
 		authRepo:  authRepo,
 		hub:       hub,
+		vodQueue:  vodQueue,
 		srsSecret: srsSecret,
 		srsAPIURL: srsAPIURL,
 		http: &http.Client{
@@ -90,7 +93,8 @@ func (s *StreamService) OnStreamStart(ctx context.Context, rawKey string, srsCli
 	return stream, nil
 }
 
-// OnStreamEnd handles the SRS on_unpublish callback: ends the stream, marks user offline.
+// OnStreamEnd handles the SRS on_unpublish callback: ends the stream, marks user offline,
+// and enqueues VOD processing if a recording path is available.
 func (s *StreamService) OnStreamEnd(ctx context.Context, srsClientID int, hlsPath, recordingPath string, durationSeconds int) error {
 	stream, err := s.repo.GetStreamBySRSClientID(ctx, srsClientID)
 	if err != nil {
@@ -115,7 +119,39 @@ func (s *StreamService) OnStreamEnd(ctx context.Context, srsClientID int, hlsPat
 		slog.Error("failed to update stream analytics", "err", err, "stream_id", stream.ID)
 	}
 
+	// Set recording status and enqueue VOD processing job
+	s.handleRecording(ctx, stream.ID, recordingPath)
+
 	return nil
+}
+
+// handleRecording sets the recording status and enqueues a VOD processing job.
+func (s *StreamService) handleRecording(ctx context.Context, streamID, recordingPath string) {
+	if recordingPath == "" {
+		if err := s.repo.UpdateRecordingStatus(ctx, streamID, "failed", "No recording available"); err != nil {
+			slog.Error("update recording status failed", "err", err, "stream_id", streamID)
+		}
+		return
+	}
+
+	if err := s.repo.UpdateRecordingStatus(ctx, streamID, "processing", ""); err != nil {
+		slog.Error("update recording status to processing failed", "err", err, "stream_id", streamID)
+		return
+	}
+
+	if s.vodQueue == nil {
+		slog.Warn("vod queue not configured, skipping job enqueue", "stream_id", streamID)
+		return
+	}
+
+	args := voddomain.VODProcessArgs{
+		StreamID:      streamID,
+		RecordingPath: recordingPath,
+	}
+	if err := s.vodQueue.Enqueue(ctx, args); err != nil {
+		slog.Error("enqueue vod processing failed", "err", err, "stream_id", streamID)
+		// Don't fail the whole on_unpublish — the recording exists on disk.
+	}
 }
 
 // OnStreamInterrupted marks a stream as interrupted.
@@ -136,7 +172,6 @@ func (s *StreamService) OnStreamInterrupted(ctx context.Context, srsClientID int
 	return nil
 }
 
-// OnStreamInterrupted
 // ListLive returns all currently live streams with viewer counts.
 func (s *StreamService) ListLive(ctx context.Context) ([]domain.LiveStream, error) {
 	streams, err := s.repo.ListLiveStreams(ctx)
@@ -221,6 +256,9 @@ func (s *StreamService) ForceEndStream(ctx context.Context, userID string) (stri
 	if err := s.repo.UpdateStreamAnalytics(ctx, userID, date, duration, stream.PeakViewers, stream.TotalViewers); err != nil {
 		slog.Error("failed to update stream analytics", "err", err, "user_id", userID)
 	}
+
+	// Force-end has no recording path from SRS
+	s.handleRecording(ctx, stream.ID, "")
 
 	if srsFailed {
 		return "Stream ended (publisher disconnect may have failed)", nil
