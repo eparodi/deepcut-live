@@ -70,6 +70,7 @@ services:
       - ./data/srs.conf:/usr/local/srs/conf/srs.conf
       - ./data/hls:/data/hls
       - ./data/recordings:/data/recordings
+      - ./data/hls/thumbnails:/usr/local/srs/objs/nginx/html/thumbnails
     logging:
       driver: "json-file"
       options:
