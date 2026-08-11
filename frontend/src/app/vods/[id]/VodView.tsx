@@ -77,8 +77,8 @@ export function VodView({ vod, hlsUrl }: VodViewProps) {
           </Link>
         </div>
 
-        {/* Processing state */}
-        {recordingStatus === "processing" && (
+        {/* Processing / Pending state */}
+        {(recordingStatus === "processing" || recordingStatus === "pending") && (
           <div
             className="w-full aspect-video rounded-xl flex items-center justify-center mb-6"
             style={{ backgroundColor: "var(--color-surface)" }}
@@ -192,6 +192,23 @@ export function VodView({ vod, hlsUrl }: VodViewProps) {
                 />
               </div>
             </section>
+          </div>
+        )}
+        {/* Fallback: unexpected status */}
+        {recordingStatus !== "ready" &&
+          recordingStatus !== "processing" &&
+          recordingStatus !== "pending" &&
+          recordingStatus !== "failed" && (
+          <div
+            className="w-full aspect-video rounded-xl flex items-center justify-center mb-6"
+            style={{ backgroundColor: "var(--color-surface)" }}
+          >
+            <div className="text-center">
+              <p className="text-4xl mb-3">📡</p>
+              <p className="text-lg text-[var(--color-text)] font-medium">
+                This recording is unavailable
+              </p>
+            </div>
           </div>
         )}
       </main>

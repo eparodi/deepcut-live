@@ -37,8 +37,14 @@ describe("VodCard", () => {
     expect(screen.getByText("1h 1m")).toBeInTheDocument();
   });
 
-  it("shows processing badge", () => {
+  it("shows processing badge for processing status", () => {
     const vod = { ...baseVod, recordingStatus: "processing" as const };
+    render(<VodCard vod={vod} />);
+    expect(screen.getByText("Processing")).toBeInTheDocument();
+  });
+
+  it("shows processing badge for pending status", () => {
+    const vod = { ...baseVod, recordingStatus: "pending" as const };
     render(<VodCard vod={vod} />);
     expect(screen.getByText("Processing")).toBeInTheDocument();
   });

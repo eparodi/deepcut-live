@@ -106,7 +106,7 @@ export interface VodItem {
   peakViewers: number;
   totalViewers: number;
   recordingPath: string | null;
-  recordingStatus: "ready" | "processing" | "failed";
+  recordingStatus: "ready" | "processing" | "failed" | "pending";
   createdAt: string;
 }
 
@@ -126,7 +126,7 @@ export interface VodDetail {
   peakViewers: number;
   totalViewers: number;
   recordingPath: string | null;
-  recordingStatus: "ready" | "processing" | "failed";
+  recordingStatus: "ready" | "processing" | "failed" | "pending";
   createdAt: string;
   /** HLS playback URL (derived from recordingPath by the backend or frontend) */
   hlsUrl: string | null;

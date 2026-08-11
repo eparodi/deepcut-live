@@ -63,6 +63,12 @@ describe("VodView", () => {
     expect(screen.getByText("Processing — available soon")).toBeInTheDocument();
   });
 
+  it("shows processing state for pending VOD", () => {
+    const vod = { ...baseVod, recordingStatus: "pending" as const };
+    render(<VodView vod={vod} hlsUrl={hlsUrl} />);
+    expect(screen.getByText("Processing — available soon")).toBeInTheDocument();
+  });
+
   it("shows failed state", () => {
     const vod = { ...baseVod, recordingStatus: "failed" as const };
     render(<VodView vod={vod} hlsUrl={hlsUrl} />);

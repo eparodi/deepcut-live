@@ -46,7 +46,7 @@ export function VodCard({ vod }: VodCardProps) {
   const { id, userName, userAvatar, title, durationSeconds, startedAt, recordingStatus } = vod;
 
   const statusLabel =
-    recordingStatus === "processing"
+    recordingStatus === "processing" || recordingStatus === "pending"
       ? "Processing"
       : recordingStatus === "failed"
         ? "Unavailable"
