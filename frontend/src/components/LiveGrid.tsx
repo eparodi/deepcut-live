@@ -1,7 +1,8 @@
 "use client";
-// Client Component — uses useState for grid/list toggle, onClick for cards
+// Client Component — uses useState for grid/list toggle, useSearchParams for sort
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { LiveStreamCard } from "./LiveStreamCard";
 import type { LiveStream } from "@/types";
 
@@ -11,9 +12,42 @@ interface LiveGridProps {
 }
 
 type ViewMode = "grid" | "list";
+type SortMode = "viewers" | "recent";
 
 export function LiveGrid({ streams, total }: LiveGridProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
+
+  // Read sort from URL query param, default to viewers
+  const sortParam = searchParams.get("sort");
+  const sortMode: SortMode = sortParam === "recent" ? "recent" : "viewers";
+
+  // Sort streams client-side
+  const sortedStreams = useMemo(() => {
+    const sorted = [...streams];
+    if (sortMode === "recent") {
+      sorted.sort(
+        (a, b) =>
+          new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
+      );
+    } else {
+      sorted.sort((a, b) => b.viewerCount - a.viewerCount);
+    }
+    return sorted;
+  }, [streams, sortMode]);
+
+  // Update URL when sort changes
+  const handleSortChange = (mode: SortMode) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (mode === "viewers") {
+      params.delete("sort");
+    } else {
+      params.set("sort", mode);
+    }
+    const query = params.toString();
+    router.replace(query ? `/?${query}` : "/", { scroll: false });
+  };
 
   // Empty state
   if (streams.length === 0) {
@@ -56,7 +90,7 @@ export function LiveGrid({ streams, total }: LiveGridProps) {
   return (
     <section aria-label="Live streams">
       {/* Section header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center flex-wrap justify-between mb-4 gap-2">
         <h2 className="text-lg font-semibold text-[var(--color-text)]">
           <span
             className="inline-block w-2 h-2 rounded-full mr-2 animate-pulse"
@@ -68,38 +102,75 @@ export function LiveGrid({ streams, total }: LiveGridProps) {
           </span>
         </h2>
 
-        {/* View toggle */}
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setViewMode("grid")}
-            className={`rounded-md px-2 py-1 text-sm transition-colors ${
-              viewMode === "grid"
-                ? "bg-[var(--color-primary)] text-white"
-                : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
-            }`}
-            aria-label="Grid view"
-            aria-pressed={viewMode === "grid"}
+        <div className="flex items-center gap-3">
+          {/* Sort control */}
+          <div
+            className="flex items-center rounded-md overflow-hidden"
+            style={{ backgroundColor: "var(--color-surface)" }}
+            role="radiogroup"
+            aria-label="Sort streams"
           >
-            ▦
-          </button>
-          <button
-            onClick={() => setViewMode("list")}
-            className={`rounded-md px-2 py-1 text-sm transition-colors ${
-              viewMode === "list"
-                ? "bg-[var(--color-primary)] text-white"
-                : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
-            }`}
-            aria-label="List view"
-            aria-pressed={viewMode === "list"}
-          >
-            ≡
-          </button>
+            <button
+              onClick={() => handleSortChange("viewers")}
+              className={`px-3 py-1 text-xs font-medium transition-colors ${
+                sortMode === "viewers"
+                  ? "bg-[var(--color-primary)] text-white"
+                  : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+              }`}
+              role="radio"
+              aria-checked={sortMode === "viewers"}
+              aria-label="Sort by viewers"
+            >
+              Viewers
+            </button>
+            <button
+              onClick={() => handleSortChange("recent")}
+              className={`px-3 py-1 text-xs font-medium transition-colors ${
+                sortMode === "recent"
+                  ? "bg-[var(--color-primary)] text-white"
+                  : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+              }`}
+              role="radio"
+              aria-checked={sortMode === "recent"}
+              aria-label="Sort by recent"
+            >
+              Recent
+            </button>
+          </div>
+
+          {/* View toggle */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setViewMode("grid")}
+              className={`rounded-md px-2 py-1 text-sm transition-colors ${
+                viewMode === "grid"
+                  ? "bg-[var(--color-primary)] text-white"
+                  : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+              }`}
+              aria-label="Grid view"
+              aria-pressed={viewMode === "grid"}
+            >
+              ▦
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              className={`rounded-md px-2 py-1 text-sm transition-colors ${
+                viewMode === "list"
+                  ? "bg-[var(--color-primary)] text-white"
+                  : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+              }`}
+              aria-label="List view"
+              aria-pressed={viewMode === "list"}
+            >
+              ≡
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Stream cards */}
       <div className={gridClass} role="list">
-        {streams.map((stream) => (
+        {sortedStreams.map((stream) => (
           <LiveStreamCard key={stream.userId} stream={stream} />
         ))}
       </div>
