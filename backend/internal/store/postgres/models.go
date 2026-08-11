@@ -17,20 +17,23 @@ type ChatMessage struct {
 }
 
 type Stream struct {
-	ID              pgtype.UUID        `json:"id"`
-	UserID          pgtype.UUID        `json:"user_id"`
-	Title           pgtype.Text        `json:"title"`
-	StartedAt       pgtype.Timestamptz `json:"started_at"`
-	EndedAt         pgtype.Timestamptz `json:"ended_at"`
-	Status          string             `json:"status"`
-	HlsPath         pgtype.Text        `json:"hls_path"`
-	RecordingPath   pgtype.Text        `json:"recording_path"`
-	RecordingStatus string             `json:"recording_status"`
-	PeakViewers     int32              `json:"peak_viewers"`
-	TotalViewers    int32              `json:"total_viewers"`
-	DurationSeconds pgtype.Int4        `json:"duration_seconds"`
-	SrsClientID     pgtype.Int4        `json:"srs_client_id"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	ID               pgtype.UUID        `json:"id"`
+	UserID           pgtype.UUID        `json:"user_id"`
+	Title            pgtype.Text        `json:"title"`
+	StartedAt        pgtype.Timestamptz `json:"started_at"`
+	EndedAt          pgtype.Timestamptz `json:"ended_at"`
+	Status           string             `json:"status"`
+	HlsPath          pgtype.Text        `json:"hls_path"`
+	RecordingPath    pgtype.Text        `json:"recording_path"`
+	RecordingStatus  string             `json:"recording_status"`
+	PeakViewers      int32              `json:"peak_viewers"`
+	TotalViewers     int32              `json:"total_viewers"`
+	DurationSeconds  pgtype.Int4        `json:"duration_seconds"`
+	SrsClientID      pgtype.Int4        `json:"srs_client_id"`
+	VodHlsPath       pgtype.Text        `json:"vod_hls_path"`
+	VodThumbnailPath pgtype.Text        `json:"vod_thumbnail_path"`
+	RecordingError   pgtype.Text        `json:"recording_error"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 }
 
 type StreamAnalytic struct {
