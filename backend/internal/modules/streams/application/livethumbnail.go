@@ -41,7 +41,10 @@ func (s *StreamService) startLiveThumbnail(streamID, streamKey string) {
 			return
 		}
 
-		hlsURL := fmt.Sprintf("%s/__defaultVhost__/live/%s.m3u8", srsHTTP, streamKey)
+		// SRS Docker image writes HLS to its internal path regardless of config.
+		// The http_server serves from /usr/local/srs/objs/nginx/html/
+		// Accessible at http://srs:8080/live/{key}.m3u8
+		hlsURL := fmt.Sprintf("%s/live/%s.m3u8", srsHTTP, streamKey)
 
 		for {
 			select {
