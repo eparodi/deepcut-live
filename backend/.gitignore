@@ -1,3 +1,4 @@
 coverage.out
 postgres.test
 /server
+/worker

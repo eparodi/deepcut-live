@@ -21,20 +21,17 @@ type Stream struct {
 }
 
 // LiveStream combines a stream with its channel owner info for the public live list.
-//
-// NOTE: HlsPath is mapped to json:"thumbnailUrl" as a pragmatic stopgap.
-// The hls_path column is the HLS playlist URL, not a thumbnail image.
-// A proper thumbnail generation pipeline should be added in a future spec.
 type LiveStream struct {
-	StreamID    string  `json:"streamId"`
-	UserID      string  `json:"userId"`
-	UserName    string  `json:"streamerName"`
-	UserAvatar  *string `json:"streamerAvatarUrl"`
-	Title       *string `json:"title"`
-	Category    *string `json:"category"`
-	StartedAt   string  `json:"startedAt"`
-	HlsPath     *string `json:"thumbnailUrl"`
-	ViewerCount int     `json:"viewerCount"`
+	StreamID     string  `json:"streamId"`
+	UserID       string  `json:"userId"`
+	UserName     string  `json:"streamerName"`
+	UserAvatar   *string `json:"streamerAvatarUrl"`
+	Title        *string `json:"title"`
+	Category     *string `json:"category"`
+	StartedAt    string  `json:"startedAt"`
+	HlsPath      *string `json:"-"`
+	ThumbnailUrl *string `json:"thumbnailUrl"`
+	ViewerCount  int     `json:"viewerCount"`
 }
 
 // ChannelInfo provides public-facing channel/profile information.
@@ -47,7 +44,8 @@ type ChannelInfo struct {
 	IsLive         bool    `json:"isLive"`
 	StreamID       *string `json:"streamId"`
 	StartedAt      *string `json:"startedAt,omitempty"`
-	HlsPath        *string `json:"thumbnailUrl,omitempty"`
+	HlsPath        *string `json:"hlsUrl,omitempty"`
+	ThumbnailUrl   *string `json:"thumbnailUrl,omitempty"`
 	ViewerCount    int     `json:"viewerCount"`
 }
 
@@ -61,6 +59,16 @@ type StreamStatusClient struct {
 type StreamStatusEvent struct {
 	Type     string `json:"type"`               // "streamStarted" or "streamEnded"
 	StreamID string `json:"streamId,omitempty"` // set on streamStarted
+}
+
+// VODStatusEvent is broadcast when a VOD's recording status changes.
+type VODStatusEvent struct {
+	Type         string `json:"type"` // "vod_status"
+	VodID        string `json:"vodId"`
+	Status       string `json:"status"` // "ready" or "failed"
+	HlsURL       string `json:"hlsUrl,omitempty"`
+	ThumbnailURL string `json:"thumbnailUrl,omitempty"`
+	Error        string `json:"error,omitempty"`
 }
 
 // Analytics holds aggregated streaming statistics.

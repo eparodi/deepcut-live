@@ -117,6 +117,9 @@ func runMigrations(ctx context.Context, pool *pgxpool.Pool) error {
 			total_viewers INT DEFAULT 0,
 			duration_seconds INT,
 			srs_client_id INT,
+			vod_hls_path TEXT,
+			vod_thumbnail_path TEXT,
+			recording_error TEXT,
 			created_at TIMESTAMPTZ DEFAULT now()
 		)`,
 		`CREATE TABLE IF NOT EXISTS stream_viewers (

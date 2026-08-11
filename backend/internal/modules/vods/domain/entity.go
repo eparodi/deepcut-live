@@ -4,19 +4,22 @@ import "time"
 
 // VOD represents a past stream available for on-demand viewing.
 type VOD struct {
-	ID              string     `json:"id"`
-	UserID          string     `json:"userId"`
-	UserName        string     `json:"userName"`
-	UserAvatar      *string    `json:"userAvatar"`
-	Title           *string    `json:"title"`
-	StartedAt       time.Time  `json:"startedAt"`
-	EndedAt         *time.Time `json:"endedAt"`
-	DurationSeconds *int       `json:"durationSeconds"`
-	PeakViewers     int        `json:"peakViewers"`
-	TotalViewers    int        `json:"totalViewers"`
-	RecordingPath   *string    `json:"recordingPath"`
-	RecordingStatus string     `json:"recordingStatus"`
-	CreatedAt       time.Time  `json:"createdAt"`
+	ID               string     `json:"id"`
+	UserID           string     `json:"userId"`
+	UserName         string     `json:"userName"`
+	UserAvatar       *string    `json:"userAvatar"`
+	Title            *string    `json:"title"`
+	StartedAt        time.Time  `json:"startedAt"`
+	EndedAt          *time.Time `json:"endedAt"`
+	DurationSeconds  *int       `json:"durationSeconds"`
+	PeakViewers      int        `json:"peakViewers"`
+	TotalViewers     int        `json:"totalViewers"`
+	RecordingPath    *string    `json:"recordingPath"`
+	RecordingStatus  string     `json:"recordingStatus"`
+	VodHlsPath       *string    `json:"hlsUrl"`
+	VodThumbnailPath *string    `json:"thumbnailUrl"`
+	RecordingError   *string    `json:"recordingError"`
+	CreatedAt        time.Time  `json:"createdAt"`
 }
 
 // SearchParams defines filters and pagination for VOD search.
