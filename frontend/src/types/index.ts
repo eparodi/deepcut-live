@@ -93,56 +93,53 @@ export interface ChatMessagesResponse {
   hasMore: boolean;
 }
 
-/** VOD item from GET /api/channel/:userId/vods */
+/** VOD item from GET /api/vods and GET /api/channel/:userId/vods */
 export interface VodItem {
   id: string;
-  title: string;
-  category: string | null;
+  userId: string;
+  userName: string;
+  userAvatar: string | null;
+  title: string | null;
   startedAt: string;
-  durationSeconds: number;
-  thumbnailUrl: string | null;
-  status: "ready" | "processing" | "failed";
+  endedAt: string | null;
+  durationSeconds: number | null;
+  peakViewers: number;
+  totalViewers: number;
+  recordingPath: string | null;
+  recordingStatus: "ready" | "processing" | "failed";
+  createdAt: string;
 }
 
 /** VOD list response from GET /api/channel/:userId/vods */
-export interface VodsResponse {
-  vods: VodItem[];
-  total: number;
-  page: number;
-}
+export type VodsResponse = VodItem[];
 
 /** VOD detail from GET /api/vods/:vodId */
 export interface VodDetail {
   id: string;
-  title: string;
-  category: string | null;
-  streamerId: string;
-  streamerName: string;
-  streamerAvatarUrl: string;
+  userId: string;
+  userName: string;
+  userAvatar: string | null;
+  title: string | null;
   startedAt: string;
-  durationSeconds: number;
+  endedAt: string | null;
+  durationSeconds: number | null;
+  peakViewers: number;
+  totalViewers: number;
+  recordingPath: string | null;
+  recordingStatus: "ready" | "processing" | "failed";
+  createdAt: string;
+  /** HLS playback URL (derived from recordingPath by the backend or frontend) */
   hlsUrl: string | null;
-  viewerCount: number;
-  status: "ready" | "processing" | "failed";
+  /** Error message when recordingStatus is "failed" */
   message?: string;
 }
 
-/** Search result item from GET /api/search */
-export interface SearchResult {
-  vodId: string;
-  title: string;
-  streamerName: string;
-  streamerAvatarUrl: string;
-  startedAt: string;
-  durationSeconds: number;
-  thumbnailUrl: string | null;
-}
-
-/** Search response from GET /api/search */
+/** Search response from GET /api/vods */
 export interface SearchResponse {
-  results: SearchResult[];
-  total: number;
-  page: number;
+  vods: VodItem[];
+  totalCount: number;
+  limit: number;
+  offset: number;
 }
 
 /** API error response */

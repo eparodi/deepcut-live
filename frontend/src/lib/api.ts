@@ -152,9 +152,10 @@ export function getChannelVods(
   page = 1,
   limit = 20
 ): Promise<VodsResponse> {
+  const offset = (page - 1) * limit;
   const params = new URLSearchParams({
-    page: String(page),
     limit: String(limit),
+    offset: String(offset),
   });
   return api<VodsResponse>(
     `/api/channel/${userId}/vods?${params.toString()}`
@@ -166,16 +167,24 @@ export function getVodDetail(vodId: string): Promise<VodDetail> {
   return api<VodDetail>(`/api/vods/${vodId}`);
 }
 
-/** GET /api/search — search VODs */
-export function searchVods(
-  query: string,
-  page = 1,
-  limit = 20
-): Promise<SearchResponse> {
-  const params = new URLSearchParams({
-    q: query,
-    page: String(page),
-    limit: String(limit),
-  });
-  return api<SearchResponse>(`/api/search?${params.toString()}`);
+/** GET /api/vods — search / browse VODs */
+export function searchVods(params: {
+  query?: string;
+  page?: number;
+  limit?: number;
+  sort?: "recent" | "popular" | "longest";
+} = {}): Promise<SearchResponse> {
+  const { query, page = 1, limit = 20, sort } = params;
+  const offset = (page - 1) * limit;
+  const searchParams = new URLSearchParams();
+  if (query) searchParams.set("q", query);
+  if (sort) searchParams.set("sort", sort);
+  searchParams.set("limit", String(limit));
+  searchParams.set("offset", String(offset));
+  return api<SearchResponse>(`/api/vods?${searchParams.toString()}`);
+}
+
+/** GET /api/vods?sort=recent&limit=N — recent VODs for homepage */
+export function getRecentVods(limit = 8): Promise<SearchResponse> {
+  return searchVods({ sort: "recent", limit, page: 1 });
 }
