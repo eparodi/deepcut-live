@@ -1,6 +1,7 @@
 "use client";
 // Client Component — needs onClick for navigation
 
+import { useState } from "react";
 import Link from "next/link";
 import type { LiveStream } from "@/types";
 
@@ -39,6 +40,9 @@ export function LiveStreamCard({
     thumbnailUrl,
   } = stream;
 
+  const [imgError, setImgError] = useState(false);
+  const showThumbnail = thumbnailUrl && !imgError;
+
   return (
     <Link
       href={`/channel/${userId}`}
@@ -51,15 +55,17 @@ export function LiveStreamCard({
     >
       {/* Thumbnail area */}
       <div className="relative aspect-video bg-[var(--color-surface)]">
-        {thumbnailUrl ? (
+        {showThumbnail && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={thumbnailUrl}
             alt={`${streamerName}'s stream thumbnail`}
             className="w-full h-full object-cover"
             loading="lazy"
+            onError={() => setImgError(true)}
           />
-        ) : (
+        )}
+        {!showThumbnail && (
           <div className="w-full h-full flex items-center justify-center">
             <span
               className="text-4xl opacity-20"
