@@ -420,20 +420,20 @@ services:
 
 ### Phase 1 — Infrastructure (blockers for everything)
 
-1. [ ] (Infra) **Add SRS DVR configuration**
+1. [x] (Infra) **Add SRS DVR configuration**
    - Files: `data/srs.conf`
    - Add `dvr {}` block under `vhost __defaultVhost__`: record to
      `/data/recordings/[stream].[timestamp].mp4` with `dvr_plan session`
    - Verifies: SRS `on_unpublish` callback includes `recording_path` param
    - Satisfies: US1 AC1, AC2
 
-2. [ ] (Infra) **Add DB migration for new columns**
+2. [x] (Infra) **Add DB migration for new columns**
    - Files: new migration SQL files in `backend/db/migrations/`
    - Add `vod_hls_path TEXT`, `vod_thumbnail_path TEXT`,
      `recording_error TEXT` to `streams` table
    - Satisfies: data model
 
-3. [ ] (Infra) **Add River dependency + worker Docker setup**
+3. [x] (Infra) **Add River dependency + worker Docker setup**
    - Files: `backend/go.mod`, `Dockerfile.worker`, `docker-compose.yml`
    - Add `github.com/riverqueue/river` to `go.mod`
    - Create `Dockerfile.worker` (Go binary + ffmpeg)
@@ -444,7 +444,7 @@ services:
 
 ### Phase 2 — Backend (can partially parallelize)
 
-4. [ ] (Backend) **Define VOD queue interface + River adapter**
+4. [x] (Backend) **Define VOD queue interface + River adapter**
    - Files: `backend/internal/modules/vods/domain/queue.go`,
      `backend/internal/modules/vods/adapter/river/`
    - Interface: `VODQueue { Enqueue(ctx, streamID, recordingPath string) error }`
@@ -452,7 +452,7 @@ services:
    - Tests: mock queue for handler/service tests
    - Satisfies: US2 AC1
 
-5. [ ] (Backend) **Update `OnStreamEnd` to set status + enqueue**
+5. [x] (Backend) **Update `OnStreamEnd` to set status + enqueue**
    - Files: `backend/internal/modules/streams/domain/repository.go`,
      `backend/internal/modules/streams/adapter/postgres/repo.go`,
      `backend/internal/modules/streams/application/service.go`
@@ -482,7 +482,7 @@ services:
    - Tests: mock ffmpeg, verify goroutine lifecycle
    - Satisfies: US1b AC1, AC2, AC3, AC4
 
-8. [ ] (Backend) **Update API responses with new fields**
+8. [x] (Backend) **Update API responses with new fields**
    - Files: `backend/internal/modules/vods/adapter/http/handler.go`,
      `backend/internal/modules/streams/adapter/http/handler.go`
    - `GET /api/vods/{id}`: add `hlsUrl`, `thumbnailUrl`, `recordingError`
@@ -493,7 +493,7 @@ services:
 
 ### Phase 3 — Worker
 
-9. [ ] (Worker) **Create `cmd/worker` binary**
+9. [x] (Worker) **Create `cmd/worker` binary**
    - Files: `backend/cmd/worker/main.go`
    - Initialize River client (connects to same PostgreSQL)
    - Register `VODProcessWorker`
@@ -501,7 +501,7 @@ services:
    - Graceful shutdown on SIGTERM
    - Satisfies: US3 infrastructure
 
-10. [ ] (Worker) **Implement VOD processing job**
+10. [x] (Worker) **Implement VOD processing job**
     - Files: `backend/internal/modules/vods/application/worker.go`
     - River job handler:
       a. Read `VODProcessArgs { StreamID, RecordingPath }`
@@ -542,13 +542,13 @@ services:
     - No changes needed when `thumbnailUrl` is `null`
     - Satisfies: US1b AC5, AC6
 
-14. [ ] (Frontend) **Use backend-provided `hlsUrl` in VOD page**
+14. [x] (Frontend) **Use backend-provided `hlsUrl` in VOD page**
     - Files: `frontend/src/app/vods/[id]/page.tsx`
     - Use `vod.hlsUrl` from API response instead of constructing
       `/hls/vods/${id}/index.m3u8`
     - Satisfies: uses real backend data
 
-15. [ ] (Frontend) **Full build + lint + test suite**
+15. [x] (Frontend) **Full build + lint + test suite**
     - Files: all
     - `npx tsc --noEmit`, `npm run lint`, `npm test` — all pass
     - `go build ./...`, `go vet ./...` — all pass
