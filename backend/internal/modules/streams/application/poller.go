@@ -74,7 +74,12 @@ func (s *StreamService) pollSRS(ctx context.Context, seen map[string]bool) {
 		}
 
 		hlsPath := "/hls/live/" + c.Name + ".m3u8"
-		stream, err := s.repo.CreateStream(ctx, userID, nil, 0, hlsPath)
+		title, _, _ := s.authRepo.GetStreamSettings(ctx, userID)
+		var streamTitle *string
+		if title != "" {
+			streamTitle = &title
+		}
+		stream, err := s.repo.CreateStream(ctx, userID, streamTitle, 0, hlsPath)
 		if err != nil {
 			s.errorLog("srs poller: create stream", "err", err, "user_id", userID)
 			continue

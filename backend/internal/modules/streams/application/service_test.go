@@ -168,6 +168,7 @@ func (m *mockStreamRepo) UpdateVODPaths(ctx context.Context, streamID, hlsPath, 
 type mockStreamAuthRepo struct {
 	getUserIDByStreamKeyHashFn func(ctx context.Context, hash string) (string, error)
 	setLiveStatusFn            func(ctx context.Context, userID string, isLive bool) error
+	getStreamSettingsFn        func(ctx context.Context, userID string) (string, string, error)
 }
 
 func (m *mockStreamAuthRepo) GetUserIDByStreamKeyHash(ctx context.Context, hash string) (string, error) {
@@ -182,6 +183,13 @@ func (m *mockStreamAuthRepo) SetLiveStatus(ctx context.Context, userID string, i
 		return m.setLiveStatusFn(ctx, userID, isLive)
 	}
 	return nil
+}
+
+func (m *mockStreamAuthRepo) GetStreamSettings(ctx context.Context, userID string) (string, string, error) {
+	if m.getStreamSettingsFn != nil {
+		return m.getStreamSettingsFn(ctx, userID)
+	}
+	return "", "", nil
 }
 
 // ---------------------------------------------------------------------------

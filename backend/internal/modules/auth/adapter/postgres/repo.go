@@ -145,6 +145,17 @@ func (r *AuthRepo) SetLiveStatus(ctx context.Context, userID string, isLive bool
 	return nil
 }
 
+func (r *AuthRepo) GetStreamSettings(ctx context.Context, userID string) (title string, category string, err error) {
+	err = r.pool.QueryRow(ctx,
+		`SELECT COALESCE(stream_title, ''), COALESCE(stream_category, '') FROM users WHERE id = $1`,
+		userID,
+	).Scan(&title, &category)
+	if err != nil {
+		return "", "", fmt.Errorf("get stream settings: %w", err)
+	}
+	return title, category, nil
+}
+
 func (r *AuthRepo) GetLiveUsers(ctx context.Context) ([]domain.User, error) {
 	query := `
 		SELECT id, google_id, email, name, avatar_url, stream_key, stream_key_hash,
