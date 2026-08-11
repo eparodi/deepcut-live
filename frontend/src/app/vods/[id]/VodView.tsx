@@ -45,6 +45,20 @@ function formatDate(isoDate: string): string {
 }
 
 export function VodView({ vod, hlsUrl }: VodViewProps) {
+  if (!vod) {
+    return (
+      <div className="min-h-full flex flex-col">
+        <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-6">
+          <div className="text-center py-16">
+            <p className="text-lg text-[var(--color-text-muted)]">
+              Unable to load this recording.
+            </p>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   const {
     id,
     userName,
