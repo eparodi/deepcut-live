@@ -24,7 +24,9 @@ func (r *VODRepo) GetVOD(ctx context.Context, vodID string) (*domain.VOD, error)
 		SELECT s.id, s.user_id, u.name, u.avatar_url,
 		       s.title, s.started_at, s.ended_at,
 		       s.duration_seconds, s.peak_viewers, s.total_viewers,
-		       s.recording_path, s.recording_status, s.created_at
+		       s.recording_path, s.recording_status,
+		       s.vod_hls_path, s.vod_thumbnail_path, s.recording_error,
+		       s.created_at
 		FROM streams s
 		JOIN users u ON s.user_id = u.id
 		WHERE s.id = $1 AND s.status = 'offline'`
@@ -34,7 +36,9 @@ func (r *VODRepo) GetVOD(ctx context.Context, vodID string) (*domain.VOD, error)
 		&vod.ID, &vod.UserID, &vod.UserName, &vod.UserAvatar,
 		&vod.Title, &vod.StartedAt, &vod.EndedAt,
 		&vod.DurationSeconds, &vod.PeakViewers, &vod.TotalViewers,
-		&vod.RecordingPath, &vod.RecordingStatus, &vod.CreatedAt,
+		&vod.RecordingPath, &vod.RecordingStatus,
+		&vod.VodHlsPath, &vod.VodThumbnailPath, &vod.RecordingError,
+		&vod.CreatedAt,
 	)
 	if err == pgx.ErrNoRows {
 		return nil, errs.NotFound("vod %s not found", vodID)
@@ -50,7 +54,9 @@ func (r *VODRepo) ListVODs(ctx context.Context, userID string, limit, offset int
 		SELECT s.id, s.user_id, u.name, u.avatar_url,
 		       s.title, s.started_at, s.ended_at,
 		       s.duration_seconds, s.peak_viewers, s.total_viewers,
-		       s.recording_path, s.recording_status, s.created_at
+		       s.recording_path, s.recording_status,
+		       s.vod_hls_path, s.vod_thumbnail_path, s.recording_error,
+		       s.created_at
 		FROM streams s
 		JOIN users u ON s.user_id = u.id
 		WHERE s.user_id = $1 AND s.status = 'offline'
@@ -73,7 +79,7 @@ func (r *VODRepo) SearchVODs(ctx context.Context, params domain.SearchParams) (*
 		WHERE s.status = 'offline'`
 
 	countQuery := "SELECT COUNT(*) " + baseQuery
-	dataQuery := "SELECT s.id, s.user_id, u.name, u.avatar_url, s.title, s.started_at, s.ended_at, s.duration_seconds, s.peak_viewers, s.total_viewers, s.recording_path, s.recording_status, s.created_at " + baseQuery
+	dataQuery := "SELECT s.id, s.user_id, u.name, u.avatar_url, s.title, s.started_at, s.ended_at, s.duration_seconds, s.peak_viewers, s.total_viewers, s.recording_path, s.recording_status, s.vod_hls_path, s.vod_thumbnail_path, s.recording_error, s.created_at " + baseQuery
 
 	args := []any{}
 	argIdx := 1
@@ -135,7 +141,6 @@ func (r *VODRepo) SearchVODs(ctx context.Context, params domain.SearchParams) (*
 	}, nil
 }
 
-
 func (r *VODRepo) IncrementViewCount(ctx context.Context, vodID string) error {
 	_, err := r.pool.Exec(ctx, `UPDATE streams SET total_viewers = total_viewers + 1, peak_viewers = GREATEST(peak_viewers, total_viewers + 1) WHERE id = $1`, vodID)
 	if err != nil {
@@ -152,7 +157,9 @@ func scanVODs(rows pgx.Rows) ([]domain.VOD, error) {
 			&v.ID, &v.UserID, &v.UserName, &v.UserAvatar,
 			&v.Title, &v.StartedAt, &v.EndedAt,
 			&v.DurationSeconds, &v.PeakViewers, &v.TotalViewers,
-			&v.RecordingPath, &v.RecordingStatus, &v.CreatedAt,
+			&v.RecordingPath, &v.RecordingStatus,
+			&v.VodHlsPath, &v.VodThumbnailPath, &v.RecordingError,
+			&v.CreatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan vod: %w", err)
 		}

@@ -64,6 +64,29 @@ func (r *StreamRepo) UpdateStreamStatus(ctx context.Context, streamID, status st
 	return nil
 }
 
+// UpdateRecordingStatus sets the recording status and optional error message.
+func (r *StreamRepo) UpdateRecordingStatus(ctx context.Context, streamID, status, errorMsg string) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE streams SET recording_status = $2, recording_error = $3
+		WHERE id = $1`, streamID, status, errorMsg)
+	if err != nil {
+		return fmt.Errorf("update recording status: %w", err)
+	}
+	return nil
+}
+
+// UpdateVODPaths sets the VOD HLS and thumbnail paths after processing.
+func (r *StreamRepo) UpdateVODPaths(ctx context.Context, streamID, hlsPath, thumbnailPath string) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE streams SET vod_hls_path = $2, vod_thumbnail_path = $3,
+		recording_status = 'ready' WHERE id = $1`,
+		streamID, hlsPath, thumbnailPath)
+	if err != nil {
+		return fmt.Errorf("update vod paths: %w", err)
+	}
+	return nil
+}
+
 func (r *StreamRepo) GetStreamByUserID(ctx context.Context, userID string) (*domain.Stream, error) {
 	var s domain.Stream
 	err := r.pool.QueryRow(ctx, `
@@ -143,6 +166,8 @@ func (r *StreamRepo) ListLiveStreams(ctx context.Context) ([]domain.LiveStream, 
 			return nil, fmt.Errorf("scan live stream: %w", err)
 		}
 		ls.StartedAt = startedAt.Format("2006-01-02T15:04:05Z")
+		thumbnailPath := "/hls/thumbnails/live/" + ls.StreamID + ".jpg"
+		ls.ThumbnailUrl = &thumbnailPath
 		result = append(result, ls)
 	}
 	if err := rows.Err(); err != nil {
@@ -192,6 +217,8 @@ func (r *StreamRepo) GetChannelInfo(ctx context.Context, userID string) (*domain
 	}
 	if streamID != "" {
 		info.StreamID = &streamID
+		thumbnailPath := "/hls/thumbnails/live/" + streamID + ".jpg"
+		info.ThumbnailUrl = &thumbnailPath
 	}
 	return &info, nil
 }

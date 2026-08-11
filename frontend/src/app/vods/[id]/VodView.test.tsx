@@ -38,6 +38,9 @@ const baseVod: VodDetail = {
   recordingStatus: "ready",
   createdAt: "2026-01-15T00:00:00Z",
   hlsUrl: null,
+  thumbnailUrl: null,
+  viewerCount: 5000,
+  recordingError: null,
 };
 
 const hlsUrl = "/hls/vods/vod-123/index.m3u8";

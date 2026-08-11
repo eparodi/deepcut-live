@@ -126,11 +126,13 @@ export interface VodDetail {
   peakViewers: number;
   totalViewers: number;
   recordingPath: string | null;
-  recordingStatus: "ready" | "processing" | "failed" | "pending";
   createdAt: string;
   /** HLS playback URL (derived from recordingPath by the backend or frontend) */
   hlsUrl: string | null;
-  /** Error message when recordingStatus is "failed" */
+  thumbnailUrl: string | null;
+  viewerCount: number;
+  recordingStatus: "pending" | "processing" | "ready" | "failed";
+  recordingError: string | null;
   message?: string;
 }
 

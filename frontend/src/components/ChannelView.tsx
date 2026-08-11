@@ -30,8 +30,7 @@ export function ChannelView({ id, initialChannel, isSignedIn }: Props) {
     return () => clearInterval(timer);
   }, [id]);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const hlsUrl = (channel as any).thumbnailUrl as string | null | undefined;
+  const hlsUrl = channel.hlsUrl;
 
   return (
     <div className="min-h-full flex flex-col">

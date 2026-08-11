@@ -51,15 +51,21 @@ export function LiveStreamCard({
     >
       {/* Thumbnail area */}
       <div className="relative aspect-video bg-[var(--color-surface)]">
-        {thumbnailUrl ? (
+        {thumbnailUrl && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={thumbnailUrl}
             alt={`${streamerName}'s stream thumbnail`}
             className="w-full h-full object-cover"
             loading="lazy"
+            onError={(e) => {
+              const target = e.target as HTMLImageElement;
+              target.onerror = null;
+              target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='180'%3E%3Crect fill='%231a1a2e' width='320' height='180'/%3E%3Ctext fill='%234a4a6a' x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-size='40'%3E%F0%9F%8E%AC%3C/text%3E%3C/svg%3E";
+            }}
           />
-        ) : (
+        )}
+        {!thumbnailUrl && (
           <div className="w-full h-full flex items-center justify-center">
             <span
               className="text-4xl opacity-20"

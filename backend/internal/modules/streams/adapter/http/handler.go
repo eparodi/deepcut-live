@@ -37,6 +37,7 @@ type streamService interface {
 type streamHub interface {
 	Join(userID string, client *domain.StreamStatusClient)
 	Leave(userID string, client *domain.StreamStatusClient)
+	NotifyVODStatus(event domain.VODStatusEvent)
 }
 
 type StreamHandler struct {
@@ -58,6 +59,9 @@ func (h *StreamHandler) RegisterRoutes(r chi.Router) {
 	r.Get("/api/streams/live", h.ListLiveStreams)
 	r.Get("/api/channel/{userID}", h.GetChannelInfo)
 	r.Post("/api/streams/{streamID}/viewer-heartbeat", h.ViewerHeartbeat)
+
+	// Internal route — called by cmd/worker after VOD processing
+	r.Post("/api/internal/vod-status", h.VODStatusNotify)
 }
 
 // SRSCallback handles SRS on_publish/on_unpublish by dispatching based on the action field.
@@ -266,6 +270,34 @@ func (h *StreamHandler) ViewerHeartbeat(w http.ResponseWriter, r *http.Request) 
 	if err := h.svc.HeartbeatViewer(r.Context(), streamID, userID, req.ClientID); err != nil {
 		render.Error(w, r, fmt.Errorf("heartbeat: %w", err))
 		return
+	}
+
+	render.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// VODStatusNotify is called by the cmd/worker after VOD processing completes.
+// It broadcasts a vod_status event to all connected WebSocket clients.
+func (h *StreamHandler) VODStatusNotify(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
+	var event domain.VODStatusEvent
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&event); err != nil {
+		render.Error(w, r, errs.BadRequest("invalid JSON: %v", err))
+		return
+	}
+
+	if event.VodID == "" || event.Status == "" {
+		render.Error(w, r, errs.BadRequest("missing vodId or status"))
+		return
+	}
+
+	event.Type = "vod_status"
+
+	if h.hub != nil {
+		h.hub.NotifyVODStatus(event)
 	}
 
 	render.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
