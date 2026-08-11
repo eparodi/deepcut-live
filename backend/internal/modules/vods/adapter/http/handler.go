@@ -64,6 +64,7 @@ func (h *VODHandler) SearchVODs(w http.ResponseWriter, r *http.Request) {
 
 	params := domain.SearchParams{
 		Query:    q.Get("q"),
+		UserID:   q.Get("userId"),
 		Category: q.Get("category"),
 		Status:   q.Get("status"),
 		Sort:     q.Get("sort"),

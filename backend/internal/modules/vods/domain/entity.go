@@ -25,6 +25,7 @@ type VOD struct {
 // SearchParams defines filters and pagination for VOD search.
 type SearchParams struct {
 	Query    string // search by title or streamer name
+	UserID   string // filter by streamer user ID
 	Category string
 	Status   string // recording_status filter: 'ready', 'processing', 'failed'
 	Sort     string // 'recent', 'popular', 'longest'

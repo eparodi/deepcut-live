@@ -170,14 +170,16 @@ export function getVodDetail(vodId: string): Promise<VodDetail> {
 /** GET /api/vods — search / browse VODs */
 export function searchVods(params: {
   query?: string;
+  userId?: string;
   page?: number;
   limit?: number;
   sort?: "recent" | "popular" | "longest";
 } = {}): Promise<SearchResponse> {
-  const { query, page = 1, limit = 20, sort } = params;
+  const { query, userId, page = 1, limit = 20, sort } = params;
   const offset = (page - 1) * limit;
   const searchParams = new URLSearchParams();
   if (query) searchParams.set("q", query);
+  if (userId) searchParams.set("userId", userId);
   if (sort) searchParams.set("sort", sort);
   searchParams.set("limit", String(limit));
   searchParams.set("offset", String(offset));

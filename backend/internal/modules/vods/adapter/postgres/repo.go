@@ -93,6 +93,15 @@ func (r *VODRepo) SearchVODs(ctx context.Context, params domain.SearchParams) (*
 		argIdx++
 	}
 
+	// User ID filter
+	if params.UserID != "" {
+		filter := fmt.Sprintf(" AND s.user_id = $%d", argIdx)
+		countQuery += filter
+		dataQuery += filter
+		args = append(args, params.UserID)
+		argIdx++
+	}
+
 	// Recording status filter
 	if params.Status != "" {
 		filter := fmt.Sprintf(" AND s.recording_status = $%d", argIdx)
@@ -150,7 +159,7 @@ func (r *VODRepo) IncrementViewCount(ctx context.Context, vodID string) error {
 }
 
 func scanVODs(rows pgx.Rows) ([]domain.VOD, error) {
-	var vods []domain.VOD
+	vods := make([]domain.VOD, 0)
 	for rows.Next() {
 		var v domain.VOD
 		if err := rows.Scan(

@@ -20,6 +20,7 @@ const PAGE_SIZE = 20;
 export default function SearchPage() {
   const searchParams = useSearchParams();
   const initialQuery = searchParams.get("q") || "";
+  const initialUserId = searchParams.get("userId") || "";
   const hasAutoSearched = useRef(false);
 
   const [query, setQuery] = useState(initialQuery);
@@ -27,20 +28,20 @@ export default function SearchPage() {
 
   const performSearch = useCallback(
     async (q: string, page = 1, append = false) => {
-      if (!q.trim()) {
+      const hasQuery = q.trim() || initialUserId;
+      if (!hasQuery) {
         setState({ status: "idle" });
         return;
       }
 
       if (append && state.status === "results") {
-        // Load more: keep existing results visible, show loadingMore
         setState({ ...state, loadingMore: true });
       } else {
         setState({ status: "loading" });
       }
 
       try {
-        const result = await searchVods({ query: q, page, limit: PAGE_SIZE });
+        const result = await searchVods({ query: q || undefined, userId: initialUserId || undefined, page, limit: PAGE_SIZE });
 
         if (result.vods.length === 0 && !append) {
           setState({ status: "empty", query: q });
@@ -75,13 +76,13 @@ export default function SearchPage() {
     [state]
   );
 
-  // Auto-search on initial load if ?q= is present
+  // Auto-search on initial load if ?q= or ?userId= is present
   useEffect(() => {
-    if (initialQuery && !hasAutoSearched.current) {
+    if ((initialQuery || initialUserId) && !hasAutoSearched.current) {
       hasAutoSearched.current = true;
       performSearch(initialQuery);
     }
-  }, [initialQuery, performSearch]);
+  }, [initialQuery, initialUserId, performSearch]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
