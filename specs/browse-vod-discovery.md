@@ -763,3 +763,23 @@ All new components use the existing design token system:
 - ❌ No sort/filter on search results (keyword search only)
 - ❌ No mobile app designs — web-only for v1
 - ❌ No dark/light theme toggle — uses existing CSS variable system
+
+## Implementation Notes
+
+Deviations and clarifications recorded during implementation (flagged for
+PM review):
+
+1. **`thumbnailUrl` was kept on `VodItem`/`VodDetail`** — task 1 said to
+   remove it "until the backend implements them"; the VOD pipeline
+   (`specs/vod-processing-pipeline.md`) now implements it, so the frontend
+   consumes it (VodCard renders it with an `onError` fallback).
+2. **`category` search param** — accepted but not filtered, per the
+   Non-Goals ("accepted for future use"). No change made.
+3. **Failed VODs are hidden on channel pages** — `ListUserVODs` now
+   excludes `recording_status='failed'`, consistent with search. The
+   streamer's own failed streams are therefore not listed on their
+   public channel page (matches the product direction "Unavailable
+   streams should not be visible").
+4. **VOD page prefers `vod.hlsUrl` from the API**, falling back to the
+   `/hls/vods/{id}/index.m3u8` convention only when the API hasn't set it.
+5. **Failed state shows `recordingError`** (not the old `message` field).

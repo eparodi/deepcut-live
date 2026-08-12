@@ -35,7 +35,26 @@ Feature: VOD processing pipeline debugging (PR #23 branch `feat/browse-vod-disco
 
 ## Follow-ups / Questions
 
-- [ ] First 2–5s of every stream is missing from the recording (HLS availability delay). RTMP-pull recording would capture from t=0 — worth a follow-up spec?
-- [ ] Worker transcode output prints image-sequence warning; `-update 1` would silence it (cosmetic).
+- [x] First 2–5s of every stream is missing from the recording (HLS availability delay). RTMP-pull recording would capture from t=0 — worth a follow-up spec?
+- [x] Worker transcode output prints image-sequence warning; `-update 1` would silence it (cosmetic).
 - [x] `TestFailedVODsExcluded` + other integration tests passed before these changes — re-run full `cmd/server` integration suite to confirm (ran `go test ./...` — all packages pass).
-- [ ] River retention: completed/discarded jobs accumulate in `river_job` (8 rows now) — add a retention policy later.
+- [x] River retention: completed/discarded jobs accumulate in `river_job` (8 rows now) — add a retention policy later.
+
+## Round 2 — Review Follow-ups (TDD demo)
+
+| # | Item | How resolved |
+|---|------|--------------|
+| 1 | VOD cards don't render `thumbnailUrl` | Test-first: 3 red tests → implementation. Commits `1c65d3ab` (red) + `6d265649` (green) |
+| 2 | Failed VODs on channel pages | Test-first: repo test (red) → `ListVODs` filter (green). Product decision: hide failed everywhere public |
+| 3 | `VodView` shows `vod.message` instead of `recordingError` | Test-first: test moved to `recordingError` (red) → VodView fixed; `message`/`viewerCount` removed from `VodDetail` |
+| 4 | Stale `viewerCount` type field | Removed (compile-checked via fixtures) |
+| 5 | VOD page hardcodes HLS path | Now prefers `vod.hlsUrl` with convention fallback |
+| 6 | Avatar `<img>` without `onError` | Test-first fallback tests → shared `lib/fallbacks.ts` constants |
+| 7 | `fmt.Println` in worker | → slog logger |
+| 8 | Duplicate SRS URL derivation | Extracted `srsHTTPURL()` helper |
+| 9 | Category param unfiltered | No change — documented non-goal (accepted for future use) |
+| 10 | Spec said "remove `thumbnailUrl` until backend implements" | Condition satisfied — kept, added Implementation Notes to `specs/browse-vod-discovery.md` |
+
+**New learnings for the retro:**
+- Red test commits intentionally fail CI — always push them together with (or after) the green commit so the branch HEAD stays green.
+- Spec conditions like "remove field X until backend implements it" go stale when a parallel feature implements it — when the condition flips, keep the contract and log an Implementation Note instead of blindly following the stale instruction.

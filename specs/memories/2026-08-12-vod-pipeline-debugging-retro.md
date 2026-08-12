@@ -55,3 +55,33 @@ standing instruction to keep the two repos in sync).
 - `VodDetail.viewerCount` is a stale type field (backend sends `totalViewers`).
 - VOD page hardcodes the HLS path instead of using `vod.hlsUrl` (spec task 14).
 - `SearchParams.Category` parsed but never filtered.
+
+## Round 2 — Review Follow-ups (TDD)
+
+All round-1 follow-ups were implemented using the newly-added test-first
+workflow (red commits followed by green commits; full suites pass: backend
+`go test ./...`, frontend 195 tests + lint 0 warnings).
+
+| Follow-up | Resolution |
+|-----------|------------|
+| VOD cards don't render `thumbnailUrl` | Implemented (test-first) |
+| Failed VODs on channel pages | Hidden everywhere public — matches product direction; documented in spec Implementation Notes |
+| `VodView` shows `vod.message` | Now renders `recordingError`; stale `message`/`viewerCount` type fields removed |
+| VOD page hardcodes HLS path | Prefers `vod.hlsUrl` with convention fallback |
+| Avatar `<img>` without onError | Shared inline-SVG fallbacks in `lib/fallbacks.ts` |
+| `SearchParams.Category` unfiltered | No change — documented non-goal (accepted for future use) |
+
+**New rules added this round** (spec-driven SKILL.md, both repos):
+
+1. **Red commits must not be the last thing pushed.** A commit containing
+   only failing tests intentionally fails CI — push it together with (or
+   after) its green counterpart so the branch HEAD stays green.
+2. **Stale spec conditions.** Spec instructions with conditions ("remove
+   field X until the backend implements it") go stale when another feature
+   implements the missing piece — when the condition flips, keep the
+   contract and log an Implementation Note instead of blindly following
+   the stale instruction.
+
+**Specs updated:** `specs/browse-vod-discovery.md` gained an Implementation
+Notes section documenting the thumbnailUrl decision, the failed-VOD hiding,
+and the recordingError/hlsUrl changes.
