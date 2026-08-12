@@ -2,6 +2,8 @@ package river
 
 import (
 	"context"
+	"os"
+	"strconv"
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
@@ -22,11 +24,12 @@ type Queue struct {
 // NewQueue creates a River-backed VOD queue. The pool is used for job
 // insertion only — job processing happens in cmd/worker.
 func NewQueue(pool *pgxpool.Pool) (*Queue, error) {
+	maxWorkers := envInt("VOD_QUEUE_MAX_WORKERS", 1)
 	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
 		Queues: map[string]river.QueueConfig{
 			// River requires at least 1 worker per queue even though this
 			// client only inserts jobs (processing happens in cmd/worker).
-			river.QueueDefault: {MaxWorkers: 1},
+			river.QueueDefault: {MaxWorkers: maxWorkers},
 		},
 	})
 	if err != nil {
@@ -34,6 +37,16 @@ func NewQueue(pool *pgxpool.Pool) (*Queue, error) {
 	}
 
 	return &Queue{client: client}, nil
+}
+
+// envInt reads an integer environment variable with a default fallback.
+func envInt(key string, def int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return def
 }
 
 // Enqueue inserts a VOD processing job into the River queue.

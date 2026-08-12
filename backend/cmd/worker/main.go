@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -43,9 +44,16 @@ func main() {
 	workers := river.NewWorkers()
 	river.AddWorker[voddomain.VODProcessArgs](workers, vodWorker)
 
+	maxWorkers := 1
+	if v := os.Getenv("VOD_WORKER_MAX_WORKERS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			maxWorkers = n
+		}
+	}
+
 	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
 		Queues: map[string]river.QueueConfig{
-			river.QueueDefault: {MaxWorkers: 1},
+			river.QueueDefault: {MaxWorkers: maxWorkers},
 		},
 		Workers: workers,
 	})
