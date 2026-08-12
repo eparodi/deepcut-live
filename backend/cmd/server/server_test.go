@@ -3,6 +3,9 @@ package main_test
 import (
 	"context"
 	"crypto/ecdsa"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
@@ -36,6 +39,7 @@ import (
 	"github.com/deepcut/live/internal/shared/errs"
 	"github.com/deepcut/live/internal/testutil"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/google/uuid"
 )
 
 var testPool *pgxpool.Pool
@@ -603,4 +607,92 @@ func (a *chatAuthAdapter) ValidateToken(ctx context.Context, tokenStr string) (u
 		avatar = *user.AvatarURL
 	}
 	return userID, user.Name, avatar, nil
+}
+
+// ---------------------------------------------------------------------------
+// TestStreamLifecycle simulates OBS publish/unpublish via SRS callbacks
+// ---------------------------------------------------------------------------
+
+func TestStreamLifecycle(t *testing.T) {
+	testutil.SkipOnShort(t)
+	srv, cleanup := setupTestServer(t)
+	t.Cleanup(cleanup)
+
+	// Create a test user with a stream key
+	userID := uuid.New().String()
+	streamKey := "test-stream-key-12345"
+	sum := sha256.Sum256([]byte(streamKey))
+	keyHash := hex.EncodeToString(sum[:])
+
+	_, err := testPool.Exec(context.Background(),
+		`INSERT INTO users (id, google_id, email, name, stream_key_hash, stream_title)
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
+		userID, "g-"+userID[:8], "test@test.com", "Test User", keyHash, "My Stream Title")
+	if err != nil {
+		t.Fatalf("create test user: %v", err)
+	}
+
+	client := srv.Client()
+
+	// 1. Simulate on_publish
+	publishBody := fmt.Sprintf(
+		`{"action":"on_publish","client_id":1,"stream":"%s","ip":"127.0.0.1","vhost":"__defaultVhost__","app":"live"}`,
+		streamKey,
+	)
+	req, _ := http.NewRequest(http.MethodPost,
+		srv.URL+"/api/srs/callback?secret=test-srs-secret",
+		strings.NewReader(publishBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("publish request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("on_publish: got %d, body: %s", resp.StatusCode, body)
+	}
+
+	// Verify stream created and is live
+	var streamID string
+	err = testPool.QueryRow(context.Background(),
+		`SELECT id FROM streams WHERE user_id = $1 AND status = 'live'`, userID).Scan(&streamID)
+	if err != nil {
+		t.Fatalf("stream not created: %v", err)
+	}
+	t.Logf("stream created: %s", streamID)
+
+	// 2. Simulate on_unpublish
+	unpublishBody := `{"action":"on_unpublish","client_id":1}`
+	req, _ = http.NewRequest(http.MethodPost,
+		srv.URL+"/api/srs/callback?secret=test-srs-secret",
+		strings.NewReader(unpublishBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err = client.Do(req)
+	if err != nil {
+		t.Fatalf("unpublish request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("on_unpublish: got %d, body: %s", resp.StatusCode, body)
+	}
+
+	// Verify recording status is set (failed since test has no VOD queue)
+	var recordingStatus string
+	err = testPool.QueryRow(context.Background(),
+		`SELECT recording_status FROM streams WHERE id = $1`, streamID).Scan(&recordingStatus)
+	if err != nil {
+		t.Fatalf("query recording status: %v", err)
+	}
+
+	// Without a real recording, status should be 'failed'
+	if recordingStatus != "failed" {
+		t.Errorf("recording_status = %q, want %q", recordingStatus, "failed")
+	}
+	t.Logf("recording status: %s (expected: no recording available in test)", recordingStatus)
 }
