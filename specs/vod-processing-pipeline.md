@@ -584,9 +584,13 @@ fragments / 60s window.
 `5u9c4d30`), not a number. `streams.srs_client_id` is now TEXT
 (migration 000004); `OnStreamStart`/`OnStreamEnd`/`disconnectSRSClient`
 all use string IDs.
-4. **Recording MP4 needs `-bsf:a aac_adtstoasc`.** SRS HLS segments carry
-ADTS-framed AAC; muxing TS→MP4 fails with "Malformed AAC bitstream"
-without the bitstream filter.
+4. **Recordings use MPEG-TS, not MP4.** Recording to MP4 with `-c copy` and
+SIGKILL at stream end loses the moov atom, which takes the AAC track's
+extradata with it — the worker's later MP4→TS copy then fails with "AAC
+bitstream not in ADTS format and extradata missing", producing garbage
+audio in the VOD. TS is a streaming container with no moov/index, so an
+abrupt kill leaves a fully readable file and ADTS audio passes through
+untouched.
 5. **SRS `on_unpublish` sends many extra JSON fields** — the handler must
 not use `DisallowUnknownFields()` (same as `on_publish`).
 6. **SRS does not send duration in `on_unpublish`** — `OnStreamEnd` computes
@@ -596,10 +600,9 @@ duration from `started_at` when the caller passes 0.
 few seconds of a stream are not in the recording. Acceptable for v1;
 RTMP-pull recording (`rtmp://srs:1935/live/{key}`) would capture from
 byte zero if this becomes a requirement.
-8. **Recording robustness**: fragmented MP4 flags
-(`frag_keyframe+empty_moov+default_base_moof`) keep the file playable when
-ffmpeg is SIGKILLed at stream end, and ffmpeg stderr is captured for
-logging (was silently discarded).
+8. **Recording robustness**: ffmpeg stderr is captured for logging (was
+silently discarded), and the TS container (note 4) keeps the file playable
+when ffmpeg is SIGKILLed at stream end.
 9. **SRS `hls_ctx` must be disabled.** By default SRS wraps every playlist
 (including static VOD playlists) in a master playlist pointing at a
 root-absolute child URL (`/vods/...?...hls_ctx=...`). hls.js resolves that
