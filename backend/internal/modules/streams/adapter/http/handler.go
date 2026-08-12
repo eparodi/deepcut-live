@@ -26,8 +26,8 @@ import (
 // streamService is the subset of *application.StreamService methods that StreamHandler needs.
 type streamService interface {
 	VerifySRSSecret(secret string) error
-	OnStreamStart(ctx context.Context, rawKey string, srsClientID int, title string) (*domain.Stream, error)
-	OnStreamEnd(ctx context.Context, srsClientID int, hlsPath, recordingPath string, durationSeconds int) error
+	OnStreamStart(ctx context.Context, rawKey string, srsClientID string, title string) (*domain.Stream, error)
+	OnStreamEnd(ctx context.Context, srsClientID string, hlsPath, recordingPath string, durationSeconds int) error
 	ListLive(ctx context.Context) ([]domain.LiveStream, error)
 	GetChannelInfo(ctx context.Context, userID string) (*domain.ChannelInfo, error)
 	HeartbeatViewer(ctx context.Context, streamID, userID, clientID string) error
@@ -110,7 +110,7 @@ func (h *StreamHandler) SRSOnPublish(w http.ResponseWriter, r *http.Request) {
 
 	var body struct {
 		Action   string `json:"action"`
-		ClientID int    `json:"client_id"`
+		ClientID string `json:"client_id"`
 		Stream   string `json:"stream"` // primary: the RTMP stream name (= OBS stream key)
 		Param    string `json:"param"`  // fallback: query-string params from the RTMP URL
 	}
@@ -168,11 +168,12 @@ func (h *StreamHandler) SRSOnUnpublish(w http.ResponseWriter, r *http.Request) {
 
 	var body struct {
 		Action   string `json:"action"`
-		ClientID int    `json:"client_id"`
+		ClientID string `json:"client_id"`
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 4096)
 	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
+	// Do NOT DisallowUnknownFields — SRS sends ip, vhost, app, tcUrl,
+	// stream_url and other fields that aren't relevant here.
 	if err := dec.Decode(&body); err != nil {
 		render.Error(w, r, errs.BadRequest("invalid JSON: %v", err))
 		return

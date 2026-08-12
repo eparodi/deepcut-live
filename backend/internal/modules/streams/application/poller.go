@@ -79,7 +79,7 @@ func (s *StreamService) pollSRS(ctx context.Context, seen map[string]bool) {
 		if title != "" {
 			streamTitle = &title
 		}
-		stream, err := s.repo.CreateStream(ctx, userID, streamTitle, 0, hlsPath)
+		stream, err := s.repo.CreateStream(ctx, userID, streamTitle, "", hlsPath)
 		if err != nil {
 			s.errorLog("srs poller: create stream", "err", err, "user_id", userID)
 			continue
@@ -92,6 +92,7 @@ func (s *StreamService) pollSRS(ctx context.Context, seen map[string]bool) {
 
 		s.hub.NotifyStreamStarted(userID, stream.ID)
 		s.startLiveThumbnail(stream.ID, c.Name)
+		recordingPaths.Store(stream.ID, s.startRecording(stream.ID, c.Name))
 		seen[c.Name] = true
 		s.infoLog("srs poller: stream started", "stream_id", stream.ID, "user_id", userID)
 	}
@@ -112,6 +113,13 @@ func (s *StreamService) pollSRS(ctx context.Context, seen map[string]bool) {
 					}
 					s.hub.NotifyStreamEnded(userID)
 					s.stopLiveThumbnail(stream.ID)
+					s.stopRecording(stream.ID)
+					recPath := ""
+					if stored, ok := recordingPaths.Load(stream.ID); ok {
+						recPath = stored.(string)
+						recordingPaths.Delete(stream.ID)
+					}
+					s.handleRecording(ctx, stream.ID, recPath)
 					s.infoLog("srs poller: stream ended", "user_id", userID)
 				}
 			}

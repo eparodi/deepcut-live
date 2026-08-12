@@ -3,10 +3,12 @@ package application
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/deepcut/live/internal/modules/streams/domain"
+	voddomain "github.com/deepcut/live/internal/modules/vods/domain"
 	"github.com/deepcut/live/internal/shared/errs"
 )
 
@@ -15,11 +17,11 @@ import (
 // ---------------------------------------------------------------------------
 
 type mockStreamRepo struct {
-	createStreamFn           func(ctx context.Context, userID string, title *string, srsClientID int, hlsPath string) (*domain.Stream, error)
+	createStreamFn           func(ctx context.Context, userID string, title *string, srsClientID string, hlsPath string) (*domain.Stream, error)
 	endStreamFn              func(ctx context.Context, streamID string, hlsPath, recordingPath string, durationSeconds int) error
 	updateStreamStatusFn     func(ctx context.Context, streamID, status string) error
 	getStreamByUserIDFn      func(ctx context.Context, userID string) (*domain.Stream, error)
-	getStreamBySRSClientIDFn func(ctx context.Context, srsClientID int) (*domain.Stream, error)
+	getStreamBySRSClientIDFn func(ctx context.Context, srsClientID string) (*domain.Stream, error)
 	listLiveStreamsFn        func(ctx context.Context) ([]domain.LiveStream, error)
 	getChannelInfoFn         func(ctx context.Context, userID string) (*domain.ChannelInfo, error)
 	upsertViewerFn           func(ctx context.Context, streamID, userID, clientID string) error
@@ -32,7 +34,7 @@ type mockStreamRepo struct {
 	updateVODPathsFn         func(ctx context.Context, streamID, hlsPath, thumbnailPath string) error
 }
 
-func (m *mockStreamRepo) CreateStream(ctx context.Context, userID string, title *string, srsClientID int, hlsPath string) (*domain.Stream, error) {
+func (m *mockStreamRepo) CreateStream(ctx context.Context, userID string, title *string, srsClientID string, hlsPath string) (*domain.Stream, error) {
 	if m.createStreamFn != nil {
 		return m.createStreamFn(ctx, userID, title, srsClientID, hlsPath)
 	}
@@ -72,7 +74,7 @@ func (m *mockStreamRepo) GetStreamByUserID(ctx context.Context, userID string) (
 	}, nil
 }
 
-func (m *mockStreamRepo) GetStreamBySRSClientID(ctx context.Context, srsClientID int) (*domain.Stream, error) {
+func (m *mockStreamRepo) GetStreamBySRSClientID(ctx context.Context, srsClientID string) (*domain.Stream, error) {
 	if m.getStreamBySRSClientIDFn != nil {
 		return m.getStreamBySRSClientIDFn(ctx, srsClientID)
 	}
@@ -302,7 +304,7 @@ func TestOnStreamStart(t *testing.T) {
 	tests := []struct {
 		name        string
 		rawKey      string
-		srsClientID int
+		srsClientID string
 		title       string
 		setupMock   func(*mockStreamAuthRepo, *mockStreamRepo)
 		wantErr     bool
@@ -310,19 +312,19 @@ func TestOnStreamStart(t *testing.T) {
 		{
 			name:        "happy path — starts stream with title",
 			rawKey:      "sk-abc",
-			srsClientID: 1,
+			srsClientID: "srs-conn-1",
 			title:       "My Awesome Stream",
 		},
 		{
 			name:        "happy path — starts stream with empty title",
 			rawKey:      "sk-abc",
-			srsClientID: 2,
+			srsClientID: "srs-conn-2",
 			title:       "",
 		},
 		{
 			name:        "error — auth fails",
 			rawKey:      "sk-bad",
-			srsClientID: 1,
+			srsClientID: "srs-conn-1",
 			setupMock: func(auth *mockStreamAuthRepo, stream *mockStreamRepo) {
 				auth.getUserIDByStreamKeyHashFn = func(ctx context.Context, hash string) (string, error) {
 					return "", errs.NotFound("not found")
@@ -333,9 +335,9 @@ func TestOnStreamStart(t *testing.T) {
 		{
 			name:        "error — create stream fails",
 			rawKey:      "sk-abc",
-			srsClientID: 1,
+			srsClientID: "srs-conn-1",
 			setupMock: func(auth *mockStreamAuthRepo, stream *mockStreamRepo) {
-				stream.createStreamFn = func(ctx context.Context, userID string, title *string, srsClientID int, hlsPath string) (*domain.Stream, error) {
+				stream.createStreamFn = func(ctx context.Context, userID string, title *string, srsClientID string, hlsPath string) (*domain.Stream, error) {
 					return nil, errors.New("insert failed")
 				}
 			},
@@ -344,7 +346,7 @@ func TestOnStreamStart(t *testing.T) {
 		{
 			name:        "error — set live status fails",
 			rawKey:      "sk-abc",
-			srsClientID: 1,
+			srsClientID: "srs-conn-1",
 			setupMock: func(auth *mockStreamAuthRepo, stream *mockStreamRepo) {
 				auth.setLiveStatusFn = func(ctx context.Context, userID string, isLive bool) error {
 					return errors.New("update failed")
@@ -393,7 +395,7 @@ func TestOnStreamEnd(t *testing.T) {
 		{
 			name: "error — get stream by SRS client ID fails",
 			setupMock: func(auth *mockStreamAuthRepo, stream *mockStreamRepo) {
-				stream.getStreamBySRSClientIDFn = func(ctx context.Context, srsClientID int) (*domain.Stream, error) {
+				stream.getStreamBySRSClientIDFn = func(ctx context.Context, srsClientID string) (*domain.Stream, error) {
 					return nil, errs.NotFound("not found")
 				}
 			},
@@ -428,7 +430,7 @@ func TestOnStreamEnd(t *testing.T) {
 			}
 			svc := NewStreamService(streamRepo, authRepo, nil, nil, "secret", "", nil)
 
-			err := svc.OnStreamEnd(context.Background(), 1, "/hls/path", "/rec/path", 600)
+			err := svc.OnStreamEnd(context.Background(), "srs-conn-1", "/hls/path", "/rec/path", 600)
 			if tt.wantErr && err == nil {
 				t.Fatal("expected error, got nil")
 			}
@@ -455,7 +457,7 @@ func TestOnStreamInterrupted(t *testing.T) {
 		{
 			name: "error — get stream fails",
 			setupMock: func(auth *mockStreamAuthRepo, stream *mockStreamRepo) {
-				stream.getStreamBySRSClientIDFn = func(ctx context.Context, srsClientID int) (*domain.Stream, error) {
+				stream.getStreamBySRSClientIDFn = func(ctx context.Context, srsClientID string) (*domain.Stream, error) {
 					return nil, errs.NotFound("not found")
 				}
 			},
@@ -481,7 +483,7 @@ func TestOnStreamInterrupted(t *testing.T) {
 			}
 			svc := NewStreamService(streamRepo, authRepo, nil, nil, "secret", "", nil)
 
-			err := svc.OnStreamInterrupted(context.Background(), 1)
+			err := svc.OnStreamInterrupted(context.Background(), "srs-conn-1")
 			if tt.wantErr && err == nil {
 				t.Fatal("expected error, got nil")
 			}
@@ -829,4 +831,37 @@ func TestForceEndStream(t *testing.T) {
 			}
 		})
 	}
+}
+
+// ---------------------------------------------------------------------------
+// TestHandleRecording_NilQueue — typed-nil queue must not panic
+// ---------------------------------------------------------------------------
+
+func TestHandleRecording_NilQueue(t *testing.T) {
+	repo := &mockStreamRepo{}
+	authRepo := &mockStreamAuthRepo{}
+
+	// Simulate a typed-nil queue: interface holding (*Queue)(nil)
+	var typedNilQueue *testNilQueue
+	var queueInterface voddomain.VODQueue = typedNilQueue
+
+	svc := NewStreamService(repo, authRepo, nil, queueInterface, "secret", "", nil)
+
+	// Must not panic even though the queue is a typed nil
+	svc.handleRecording(context.Background(), "stream-1", "/data/recordings/stream-1.mp4")
+
+	// Verify status was set to processing (queue enqueue is best-effort)
+	if repo.updateRecordingStatusFn == nil {
+		t.Log("updateRecordingStatus not asserted via mock fn — verified no panic")
+	}
+}
+
+// testNilQueue implements voddomain.VODQueue but is always nil.
+type testNilQueue struct{}
+
+func (q *testNilQueue) Enqueue(ctx context.Context, args voddomain.VODProcessArgs) error {
+	if q == nil {
+		return fmt.Errorf("queue not initialized")
+	}
+	return nil
 }

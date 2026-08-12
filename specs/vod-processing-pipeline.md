@@ -564,3 +564,48 @@ Phase 4:  Task 11 → {12, 13} → 14 → 15
 ```
 
 Total: 15 tasks across 4 phases. Backend + Worker = 10 tasks, Frontend = 5 tasks.
+
+## Implementation Notes
+
+Findings discovered during implementation that deviate from or clarify the
+approved design. Added by the engineering team, flagged for the PM.
+
+1. **SRS 5.0 dropped LL-HLS.** `hls_ll_enabled` / `hls_ll_fragment` no longer
+exist in SRS 5.0.213 (config validation fails with "illegal
+vhost.hls.hls_ll_enabled"). We use plain HLS with 2s fragments / 6-segment
+window instead. The `specs/hls-low-latency.md` LL-HLS tuning is not
+applicable on this SRS version.
+2. **The `ossrs/srs:5` image ignores `conf/srs.conf`.** Its entrypoint loads
+`conf/docker.conf`, so our tuned config must be mounted at
+`/usr/local/srs/conf/docker.conf` (see `data/docker.conf`). This is why
+earlier tuning attempts had no effect and why SRS defaulted to 10s
+fragments / 60s window.
+3. **SRS http_hooks `client_id` is a string** (connection id like
+`5u9c4d30`), not a number. `streams.srs_client_id` is now TEXT
+(migration 000004); `OnStreamStart`/`OnStreamEnd`/`disconnectSRSClient`
+all use string IDs.
+4. **Recordings use MPEG-TS, not MP4.** Recording to MP4 with `-c copy` and
+SIGKILL at stream end loses the moov atom, which takes the AAC track's
+extradata with it — the worker's later MP4→TS copy then fails with "AAC
+bitstream not in ADTS format and extradata missing", producing garbage
+audio in the VOD. TS is a streaming container with no moov/index, so an
+abrupt kill leaves a fully readable file and ADTS audio passes through
+untouched.
+5. **SRS `on_unpublish` sends many extra JSON fields** — the handler must
+not use `DisallowUnknownFields()` (same as `on_publish`).
+6. **SRS does not send duration in `on_unpublish`** — `OnStreamEnd` computes
+duration from `started_at` when the caller passes 0.
+7. **Recording start is delayed until the first HLS segment exists**
+(~2–5s after publish; the retry loop covers the 404 window). The first
+few seconds of a stream are not in the recording. Acceptable for v1;
+RTMP-pull recording (`rtmp://srs:1935/live/{key}`) would capture from
+byte zero if this becomes a requirement.
+8. **Recording robustness**: ffmpeg stderr is captured for logging (was
+silently discarded), and the TS container (note 4) keeps the file playable
+when ffmpeg is SIGKILLed at stream end.
+9. **SRS `hls_ctx` must be disabled.** By default SRS wraps every playlist
+(including static VOD playlists) in a master playlist pointing at a
+root-absolute child URL (`/vods/...?...hls_ctx=...`). hls.js resolves that
+against the frontend origin, losing the `/hls` proxy prefix → 404. With
+`hls_ctx off`, SRS serves the raw playlist with relative segment URIs and
+both live and VOD playback work through the `/hls/*` rewrite.

@@ -5,9 +5,12 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"io"
 	"log"
 	"log/slog"
@@ -35,6 +38,7 @@ import (
 	vodapp "github.com/deepcut/live/internal/modules/vods/application"
 	"github.com/deepcut/live/internal/shared/errs"
 	"github.com/deepcut/live/internal/testutil"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -603,4 +607,431 @@ func (a *chatAuthAdapter) ValidateToken(ctx context.Context, tokenStr string) (u
 		avatar = *user.AvatarURL
 	}
 	return userID, user.Name, avatar, nil
+}
+
+// ---------------------------------------------------------------------------
+// TestStreamLifecycle simulates OBS publish/unpublish via SRS callbacks
+// ---------------------------------------------------------------------------
+
+func TestStreamLifecycle(t *testing.T) {
+	testutil.SkipOnShort(t)
+	srv, cleanup := setupTestServer(t)
+	t.Cleanup(cleanup)
+
+	// Create a test user with a stream key
+	userID := uuid.New().String()
+	streamKey := "test-stream-key-12345"
+	sum := sha256.Sum256([]byte(streamKey))
+	keyHash := hex.EncodeToString(sum[:])
+
+	_, err := testPool.Exec(context.Background(),
+		`INSERT INTO users (id, google_id, email, name, stream_key_hash, stream_title)
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
+		userID, "g-"+userID[:8], "test@test.com", "Test User", keyHash, "My Stream Title")
+	if err != nil {
+		t.Fatalf("create test user: %v", err)
+	}
+
+	client := srv.Client()
+
+	// 1. Simulate on_publish
+	publishBody := fmt.Sprintf(
+		`{"action":"on_publish","client_id":"srs-conn-test","stream":"%s","ip":"127.0.0.1","vhost":"__defaultVhost__","app":"live"}`,
+		streamKey,
+	)
+	req, _ := http.NewRequest(http.MethodPost,
+		srv.URL+"/api/srs/callback?secret=test-srs-secret",
+		strings.NewReader(publishBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("publish request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("on_publish: got %d, body: %s", resp.StatusCode, body)
+	}
+
+	// Verify stream created and is live
+	var streamID string
+	err = testPool.QueryRow(context.Background(),
+		`SELECT id FROM streams WHERE user_id = $1 AND status = 'live'`, userID).Scan(&streamID)
+	if err != nil {
+		t.Fatalf("stream not created: %v", err)
+	}
+	t.Logf("stream created: %s", streamID)
+
+	// 2. Create a dummy recording file (simulating ffmpeg recording output)
+	// The recording goroutine was started by OnStreamStart; create the file
+	// at the path it would produce so handleRecording finds it.
+	// The recording goroutine was started by OnStreamStart and the path
+	// was stored in recordingPaths. OnStreamEnd will retrieve it.
+
+	// 2. Simulate on_unpublish
+	unpublishBody := `{"action":"on_unpublish","client_id":"srs-conn-test"}`
+	req, _ = http.NewRequest(http.MethodPost,
+		srv.URL+"/api/srs/callback?secret=test-srs-secret",
+		strings.NewReader(unpublishBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err = client.Do(req)
+	if err != nil {
+		t.Fatalf("unpublish request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("on_unpublish: got %d, body: %s", resp.StatusCode, body)
+	}
+
+	// Verify recording status is set (failed since test has no VOD queue)
+	var recordingStatus string
+	err = testPool.QueryRow(context.Background(),
+		`SELECT recording_status FROM streams WHERE id = $1`, streamID).Scan(&recordingStatus)
+	if err != nil {
+		t.Fatalf("query recording status: %v", err)
+	}
+
+	// With a recording file, status should be 'processing' (enqueued for worker)
+	// Note: the VOD queue is nil in tests, so no River job is created
+	if recordingStatus != "processing" {
+		t.Errorf("recording_status = %q, want %q", recordingStatus, "processing")
+	}
+	t.Logf("recording status: %s", recordingStatus)
+}
+
+// ---------------------------------------------------------------------------
+// TestVODViewingFlow — full lifecycle: stream → process → watch VOD
+// ---------------------------------------------------------------------------
+
+func TestVODViewingFlow(t *testing.T) {
+	testutil.SkipOnShort(t)
+	srv, cleanup := setupTestServer(t)
+	t.Cleanup(cleanup)
+
+	// Create a test user with a stream key
+	userID := uuid.New().String()
+	streamKey := "vod-test-key-67890"
+	sum := sha256.Sum256([]byte(streamKey))
+	keyHash := hex.EncodeToString(sum[:])
+
+	_, err := testPool.Exec(context.Background(),
+		`INSERT INTO users (id, google_id, email, name, stream_key_hash, stream_title)
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
+		userID, "g-"+userID[:8], "vod@test.com", "VOD Tester", keyHash, "My Test Stream")
+	if err != nil {
+		t.Fatalf("create test user: %v", err)
+	}
+
+	client := srv.Client()
+	streamID := simulateStreamLifecycle(t, client, srv.URL, streamKey, userID)
+
+	// Manually mark VOD as ready (simulating worker processing)
+	vodHlsPath := "/hls/vods/" + streamID + "/index.m3u8"
+	vodThumbPath := "/hls/thumbnails/" + streamID + ".jpg"
+	_, err = testPool.Exec(context.Background(),
+		`UPDATE streams SET recording_status = 'ready', vod_hls_path = $2, vod_thumbnail_path = $3 WHERE id = $1`,
+		streamID, vodHlsPath, vodThumbPath)
+	if err != nil {
+		t.Fatalf("mark vod ready: %v", err)
+	}
+
+	// Verify GET /api/vods/{id} returns VOD with hlsUrl
+	t.Run("get vod detail", func(t *testing.T) {
+		resp, err := client.Get(srv.URL + "/api/vods/" + streamID)
+		if err != nil {
+			t.Fatalf("get vod: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("get vod status: %d", resp.StatusCode)
+		}
+
+		var vod struct {
+			ID              string  `json:"id"`
+			Title           *string `json:"title"`
+			RecordingStatus string  `json:"recordingStatus"`
+			HlsURL          *string `json:"hlsUrl"`
+			ThumbnailURL    *string `json:"thumbnailUrl"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&vod); err != nil {
+			t.Fatalf("decode vod: %v", err)
+		}
+
+		if vod.RecordingStatus != "ready" {
+			t.Errorf("recordingStatus = %q, want ready", vod.RecordingStatus)
+		}
+		if vod.HlsURL == nil || *vod.HlsURL != vodHlsPath {
+			t.Errorf("hlsUrl = %v, want %s", vod.HlsURL, vodHlsPath)
+		}
+		if vod.ThumbnailURL == nil || *vod.ThumbnailURL != vodThumbPath {
+			t.Errorf("thumbnailUrl = %v, want %s", vod.ThumbnailURL, vodThumbPath)
+		}
+		t.Logf("VOD ready: hlsUrl=%s thumbnailUrl=%s", *vod.HlsURL, *vod.ThumbnailURL)
+	})
+
+	// Verify search returns this VOD
+	t.Run("search finds vod", func(t *testing.T) {
+		resp, err := client.Get(srv.URL + "/api/vods?sort=recent&limit=10")
+		if err != nil {
+			t.Fatalf("search vods: %v", err)
+		}
+		defer resp.Body.Close()
+
+		var result struct {
+			VODs       []map[string]any `json:"vods"`
+			TotalCount int              `json:"totalCount"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			t.Fatalf("decode search: %v", err)
+		}
+
+		if result.TotalCount < 1 {
+			t.Fatal("search returned no VODs")
+		}
+		if result.VODs == nil {
+			t.Fatal("vods array is nil, want empty array at minimum")
+		}
+		t.Logf("search returned %d VODs", result.TotalCount)
+	})
+
+	// Verify search by userId
+	t.Run("search by userId", func(t *testing.T) {
+		resp, err := client.Get(srv.URL + "/api/vods?userId=" + userID)
+		if err != nil {
+			t.Fatalf("search by userId: %v", err)
+		}
+		defer resp.Body.Close()
+
+		var result struct {
+			VODs       []map[string]any `json:"vods"`
+			TotalCount int              `json:"totalCount"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			t.Fatalf("decode search: %v", err)
+		}
+
+		if result.TotalCount != 1 {
+			t.Errorf("userId search: got %d VODs, want 1", result.TotalCount)
+		}
+	})
+
+	// Verify empty search returns [] not null
+	t.Run("empty search returns empty array", func(t *testing.T) {
+		resp, err := client.Get(srv.URL + "/api/vods?q=nonexistent12345")
+		if err != nil {
+			t.Fatalf("empty search: %v", err)
+		}
+		defer resp.Body.Close()
+
+		var result struct {
+			VODs []map[string]any `json:"vods"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+
+		if result.VODs == nil {
+			t.Error("empty search returned null, want []")
+		}
+	})
+}
+
+// ---------------------------------------------------------------------------
+// TestStreamTitleInVOD — verifies stream title from user settings appears
+// ---------------------------------------------------------------------------
+
+func TestStreamTitleInVOD(t *testing.T) {
+	testutil.SkipOnShort(t)
+	srv, cleanup := setupTestServer(t)
+	t.Cleanup(cleanup)
+
+	userID := uuid.New().String()
+	streamKey := "title-test-key"
+	sum := sha256.Sum256([]byte(streamKey))
+	keyHash := hex.EncodeToString(sum[:])
+	expectedTitle := "Custom Stream Title 42"
+
+	_, err := testPool.Exec(context.Background(),
+		`INSERT INTO users (id, google_id, email, name, stream_key_hash, stream_title)
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
+		userID, "g-"+userID[:8], "title@test.com", "Title Tester", keyHash, expectedTitle)
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	client := srv.Client()
+	streamID := simulateStreamLifecycle(t, client, srv.URL, streamKey, userID)
+
+	// Mark ready so it appears in search
+	testPool.Exec(context.Background(),
+		`UPDATE streams SET recording_status = 'ready' WHERE id = $1`, streamID)
+
+	// Verify the VOD has the user's stream title
+	resp, err := client.Get(srv.URL + "/api/vods/" + streamID)
+	if err != nil {
+		t.Fatalf("get vod: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var vod struct {
+		Title *string `json:"title"`
+	}
+	json.NewDecoder(resp.Body).Decode(&vod)
+
+	if vod.Title == nil || *vod.Title != expectedTitle {
+		t.Errorf("vod title = %v, want %q", vod.Title, expectedTitle)
+	}
+	t.Logf("VOD title: %v", vod.Title)
+}
+
+// ---------------------------------------------------------------------------
+// TestRecordingStatusTransitions — verifies status state machine
+// ---------------------------------------------------------------------------
+
+func TestRecordingStatusTransitions(t *testing.T) {
+	testutil.SkipOnShort(t)
+	srv, cleanup := setupTestServer(t)
+	t.Cleanup(cleanup)
+
+	userID := uuid.New().String()
+	streamKey := "status-test-key"
+	sum := sha256.Sum256([]byte(streamKey))
+	keyHash := hex.EncodeToString(sum[:])
+
+	testPool.Exec(context.Background(),
+		`INSERT INTO users (id, google_id, email, name, stream_key_hash)
+		 VALUES ($1, $2, $3, $4, $5)`,
+		userID, "g-"+userID[:8], "status@test.com", "Status Tester", keyHash)
+
+	client := srv.Client()
+	streamID := simulateStreamLifecycle(t, client, srv.URL, streamKey, userID)
+
+	// Verify initial status after publish
+	var status string
+	testPool.QueryRow(context.Background(),
+		`SELECT recording_status FROM streams WHERE id = $1`, streamID).Scan(&status)
+
+	if status != "processing" {
+		t.Errorf("after publish: recording_status = %q, want processing", status)
+	}
+
+	// Simulate worker marking ready
+	testPool.Exec(context.Background(),
+		`UPDATE streams SET recording_status = 'ready' WHERE id = $1`, streamID)
+
+	testPool.QueryRow(context.Background(),
+		`SELECT recording_status FROM streams WHERE id = $1`, streamID).Scan(&status)
+
+	if status != "ready" {
+		t.Errorf("after worker: recording_status = %q, want ready", status)
+	}
+	t.Logf("status transitions: pending → processing → ready ✅")
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+// simulateStreamLifecycle sends on_publish and on_unpublish callbacks,
+// returning the created stream ID.
+func simulateStreamLifecycle(t *testing.T, client *http.Client, srvURL, streamKey, userID string) string {
+	t.Helper()
+
+	// on_publish
+	publishBody := fmt.Sprintf(
+		`{"action":"on_publish","client_id":"srs-conn-999","stream":"%s","ip":"127.0.0.1","vhost":"__defaultVhost__","app":"live"}`,
+		streamKey,
+	)
+	req, _ := http.NewRequest(http.MethodPost,
+		srvURL+"/api/srs/callback?secret=test-srs-secret",
+		strings.NewReader(publishBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("on_publish failed: %d %s", resp.StatusCode, body)
+	}
+
+	// Get stream ID
+	var streamID string
+	err = testPool.QueryRow(context.Background(),
+		`SELECT id FROM streams WHERE user_id = $1 AND status = 'live'`, userID).Scan(&streamID)
+	if err != nil {
+		t.Fatalf("stream not created: %v", err)
+	}
+
+	// on_unpublish
+	unpublishBody := `{"action":"on_unpublish","client_id":"srs-conn-999"}`
+	req, _ = http.NewRequest(http.MethodPost,
+		srvURL+"/api/srs/callback?secret=test-srs-secret",
+		strings.NewReader(unpublishBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err = client.Do(req)
+	if err != nil {
+		t.Fatalf("unpublish: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("on_unpublish failed: %d %s", resp.StatusCode, body)
+	}
+
+	return streamID
+}
+
+// ---------------------------------------------------------------------------
+// TestFailedVODsExcluded — failed recordings don't appear in search
+// ---------------------------------------------------------------------------
+
+func TestFailedVODsExcluded(t *testing.T) {
+	testutil.SkipOnShort(t)
+	srv, cleanup := setupTestServer(t)
+	t.Cleanup(cleanup)
+
+	userID := uuid.New().String()
+	streamKey := "failed-vod-test-key"
+	sum := sha256.Sum256([]byte(streamKey))
+	keyHash := hex.EncodeToString(sum[:])
+
+	testPool.Exec(context.Background(),
+		`INSERT INTO users (id, google_id, email, name, stream_key_hash)
+		 VALUES ($1, $2, $3, $4, $5)`,
+		userID, "g-"+userID[:8], "failed@test.com", "Failed Tester", keyHash)
+
+	client := srv.Client()
+	streamID := simulateStreamLifecycle(t, client, srv.URL, streamKey, userID)
+
+	// Mark the VOD as failed
+	testPool.Exec(context.Background(),
+		`UPDATE streams SET recording_status = 'failed', recording_error = 'No recording available' WHERE id = $1`, streamID)
+
+	// Search should NOT include the failed VOD
+	resp, err := client.Get(srv.URL + "/api/vods?sort=recent&limit=10")
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		VODs       []map[string]any `json:"vods"`
+		TotalCount int              `json:"totalCount"`
+	}
+	json.NewDecoder(resp.Body).Decode(&result)
+
+	if result.TotalCount != 0 {
+		t.Errorf("failed VOD appeared in search: totalCount=%d, want 0", result.TotalCount)
+	}
+	t.Logf("failed VOD correctly excluded from search ✅")
 }

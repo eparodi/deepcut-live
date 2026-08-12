@@ -16,7 +16,7 @@ type Stream struct {
 	PeakViewers     int
 	TotalViewers    int
 	DurationSeconds *int
-	SRSClientID     *int
+	SRSClientID     *string
 	CreatedAt       time.Time
 }
 

@@ -29,7 +29,7 @@ type Stream struct {
 	PeakViewers      int32              `json:"peak_viewers"`
 	TotalViewers     int32              `json:"total_viewers"`
 	DurationSeconds  pgtype.Int4        `json:"duration_seconds"`
-	SrsClientID      pgtype.Int4        `json:"srs_client_id"`
+	SrsClientID      pgtype.Text        `json:"srs_client_id"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	VodHlsPath       pgtype.Text        `json:"vod_hls_path"`
 	VodThumbnailPath pgtype.Text        `json:"vod_thumbnail_path"`

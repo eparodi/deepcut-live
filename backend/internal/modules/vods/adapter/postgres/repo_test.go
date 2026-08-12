@@ -144,6 +144,32 @@ func TestVODRepo_ListVODs(t *testing.T) {
 			t.Fatalf("expected 1 VOD, got %d", len(vods2))
 		}
 	})
+
+	// Test-first: written before ListVODs excludes failed recordings.
+	// Unavailable VODs must not appear on public channel pages.
+	t.Run("excludes failed recordings", func(t *testing.T) {
+		_, err := repo.pool.Exec(ctx,
+			`INSERT INTO streams (user_id, title, status, recording_status, recording_error, started_at, ended_at)
+			 VALUES ($1, 'Broken VOD', 'offline', 'failed', 'recording empty', now() - interval '1 hour', now())`,
+			userID,
+		)
+		if err != nil {
+			t.Fatalf("seed failed stream: %v", err)
+		}
+
+		vods, err := repo.ListVODs(ctx, userID, 10, 0)
+		if err != nil {
+			t.Fatalf("ListVODs (failed exclusion): %v", err)
+		}
+		if len(vods) != 3 {
+			t.Fatalf("expected 3 ready VODs with the failed one excluded, got %d", len(vods))
+		}
+		for _, v := range vods {
+			if v.RecordingStatus == "failed" {
+				t.Fatalf("failed VOD %q must not be listed", v.ID)
+			}
+		}
+	})
 }
 
 func TestVODRepo_SearchVODs(t *testing.T) {

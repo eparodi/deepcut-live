@@ -19,6 +19,7 @@ services:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       SRS_CALLBACK_SECRET: dev-srs-secret
+      VOD_QUEUE_MAX_WORKERS: ${VOD_QUEUE_MAX_WORKERS:-1}
     depends_on:
       postgres:
         condition: service_healthy
@@ -38,6 +39,8 @@ services:
     environment:
       DATABASE_URL: postgres://live:live@postgres:5432/live?sslmode=disable
       VOD_ENCODING_PRESET: copy
+      VOD_WORKER_MAX_WORKERS: ${VOD_WORKER_MAX_WORKERS:-1}
+      BACKEND_URL: http://backend:8081
     depends_on:
       postgres:
         condition: service_healthy
@@ -67,10 +70,11 @@ services:
       - "1935:1935"
       - "8080:8080"
     volumes:
-      - ./data/srs.conf:/usr/local/srs/conf/srs.conf
+      # The ossrs/srs:5 entrypoint loads conf/docker.conf (NOT conf/srs.conf),
+      # so our tuned config must be mounted over that path.
+      - ./data/docker.conf:/usr/local/srs/conf/docker.conf
       - ./data/hls:/data/hls
       - ./data/recordings:/data/recordings
-      - ./data/hls/thumbnails:/usr/local/srs/objs/nginx/html/thumbnails
     logging:
       driver: "json-file"
       options:

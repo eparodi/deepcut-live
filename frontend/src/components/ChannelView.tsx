@@ -78,7 +78,7 @@ export function ChannelView({ id, initialChannel, isSignedIn }: Props) {
 
             <div className="pt-2">
               <Link
-                href={`/search?q=${encodeURIComponent(channel.streamerName)}`}
+                href={`/search?userId=${channel.userId}`}
                 className="text-sm font-medium hover:underline"
                 style={{ color: "var(--color-primary)" }}
               >

@@ -1,0 +1,140 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
+import { VodView } from "./VodView";
+import type { VodDetail } from "@/types";
+
+// ── Mocks ──────────────────────────────────────────────────────
+
+vi.mock("@/components/VideoPlayer", () => ({
+  VideoPlayer: ({ isLive, vodId }: { isLive: boolean; vodId?: string; hlsUrl: string; viewerCount?: number }) => (
+    <div data-testid="video-player">
+      VideoPlayer: isLive={String(isLive)} vodId={vodId || "none"}
+    </div>
+  ),
+}));
+
+vi.mock("@/components/ChatPanel", () => ({
+  ChatPanel: ({ streamId, isStreamEnded }: { streamId: string; isStreamEnded: boolean; isSignedIn: boolean }) => (
+    <div data-testid="chat-panel">
+      ChatPanel: streamId={streamId} isStreamEnded={String(isStreamEnded)}
+    </div>
+  ),
+}));
+
+// ── Test data ──────────────────────────────────────────────────
+
+const baseVod: VodDetail = {
+  id: "vod-123",
+  userId: "user-456",
+  userName: "TestStreamer",
+  userAvatar: "https://example.com/avatar.jpg",
+  title: "Amazing Stream",
+  startedAt: "2026-01-15T00:00:00Z",
+  endedAt: "2026-01-15T01:30:00Z",
+  durationSeconds: 5400,
+  peakViewers: 1200,
+  totalViewers: 5000,
+  recordingPath: null,
+  recordingStatus: "ready",
+  createdAt: "2026-01-15T00:00:00Z",
+  hlsUrl: null,
+  thumbnailUrl: null,
+  recordingError: null,
+};
+
+const hlsUrl = "/hls/vods/vod-123/index.m3u8";
+
+// ── Tests ──────────────────────────────────────────────────────
+
+describe("VodView", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("renders player and chat for ready VOD", () => {
+    render(<VodView vod={baseVod} hlsUrl={hlsUrl} />);
+    expect(screen.getByTestId("video-player")).toBeInTheDocument();
+    // Two ChatPanels: one for desktop (hidden), one for mobile (hidden)
+    const chatPanels = screen.getAllByTestId("chat-panel");
+    expect(chatPanels).toHaveLength(2);
+  });
+
+  it("shows processing state", () => {
+    const vod = { ...baseVod, recordingStatus: "processing" as const };
+    render(<VodView vod={vod} hlsUrl={hlsUrl} />);
+    expect(screen.getByText("Processing — available soon")).toBeInTheDocument();
+  });
+
+  it("shows processing state for pending VOD", () => {
+    const vod = { ...baseVod, recordingStatus: "pending" as const };
+    render(<VodView vod={vod} hlsUrl={hlsUrl} />);
+    expect(screen.getByText("Processing — available soon")).toBeInTheDocument();
+  });
+
+  it("shows failed state", () => {
+    const vod = { ...baseVod, recordingStatus: "failed" as const };
+    render(<VodView vod={vod} hlsUrl={hlsUrl} />);
+    expect(
+      screen.getByText("This recording is unavailable")
+    ).toBeInTheDocument();
+  });
+
+  // Test-first: the backend sends recordingError, not message.
+  it("shows recordingError in the failed state", () => {
+    const vod = {
+      ...baseVod,
+      recordingStatus: "failed" as const,
+      recordingError: "Recording file corrupted",
+    };
+    render(<VodView vod={vod} hlsUrl={hlsUrl} />);
+    expect(screen.getByText("Recording file corrupted")).toBeInTheDocument();
+  });
+
+  it("renders title, streamer name, and date", () => {
+    render(<VodView vod={baseVod} hlsUrl={hlsUrl} />);
+    expect(screen.getByText("Amazing Stream")).toBeInTheDocument();
+    expect(screen.getByText("TestStreamer")).toBeInTheDocument();
+    // Date format: "Jan 15, 2026"
+    expect(screen.getByText(/Jan 15, 2026/)).toBeInTheDocument();
+  });
+
+  it("renders duration and view count", () => {
+    render(<VodView vod={baseVod} hlsUrl={hlsUrl} />);
+    expect(screen.getByText("1h 30m")).toBeInTheDocument();
+    expect(screen.getByText("5k views")).toBeInTheDocument();
+  });
+
+  // Test-first: sub-minute durations must not render as "0m".
+  it("formats sub-minute durations with seconds", () => {
+    const vod = { ...baseVod, durationSeconds: 45 };
+    render(<VodView vod={vod} hlsUrl={hlsUrl} />);
+    expect(screen.getByText("45s")).toBeInTheDocument();
+  });
+
+  it("renders fallback title when title is null", () => {
+    const vod = { ...baseVod, title: null };
+    render(<VodView vod={vod} hlsUrl={hlsUrl} />);
+    expect(screen.getByText("Untitled stream")).toBeInTheDocument();
+  });
+
+  it("streamer name links to channel page", () => {
+    render(<VodView vod={baseVod} hlsUrl={hlsUrl} />);
+    const link = screen.getByText("TestStreamer").closest("a");
+    expect(link).toHaveAttribute("href", "/channel/user-456");
+  });
+
+  // Test-first: rule 10.3 — every <img> with a potentially-missing src
+  // must have an onError fallback.
+  it("falls back to placeholder on avatar image error", () => {
+    render(<VodView vod={baseVod} hlsUrl={hlsUrl} />);
+    const img = screen.getByAltText("TestStreamer");
+    fireEvent.error(img);
+    expect(img).toHaveAttribute("src", expect.stringContaining("data:image/svg+xml"));
+  });
+
+  it("renders back link to search", () => {
+    render(<VodView vod={baseVod} hlsUrl={hlsUrl} />);
+    const link = screen.getByText("← Back to search");
+    expect(link.closest("a")).toHaveAttribute("href", "/search");
+  });
+});

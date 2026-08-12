@@ -581,6 +581,10 @@ Before opening a PR for a frontend component:
 - [ ] `npx tsc --noEmit` passes
 - [ ] `npm run lint` passes (with `--max-warnings 0` — CI enforces this)
 - [ ] At minimum a render test for each component
+- [ ] **Test-first:** the render test for each distinct state (loading,
+  empty, error, populated) is written and shown failing BEFORE the
+  component renders that state; bug fixes get a failing regression test
+  first (AGENTS.md §5.2, spec-driven skill Phase 4)
 
 ### React Patterns — `useRef` vs `useState`
 

@@ -60,6 +60,7 @@ func (r *VODRepo) ListVODs(ctx context.Context, userID string, limit, offset int
 		FROM streams s
 		JOIN users u ON s.user_id = u.id
 		WHERE s.user_id = $1 AND s.status = 'offline'
+		  AND s.recording_status != 'failed'
 		ORDER BY s.created_at DESC
 		LIMIT $2 OFFSET $3`
 
@@ -78,6 +79,12 @@ func (r *VODRepo) SearchVODs(ctx context.Context, params domain.SearchParams) (*
 		JOIN users u ON s.user_id = u.id
 		WHERE s.status = 'offline'`
 
+	// Exclude failed recordings by default — nothing to watch.
+	// Explicit status=failed requests can override this.
+	if params.Status == "" {
+		baseQuery += " AND s.recording_status != 'failed'"
+	}
+
 	countQuery := "SELECT COUNT(*) " + baseQuery
 	dataQuery := "SELECT s.id, s.user_id, u.name, u.avatar_url, s.title, s.started_at, s.ended_at, s.duration_seconds, s.peak_viewers, s.total_viewers, s.recording_path, s.recording_status, s.vod_hls_path, s.vod_thumbnail_path, s.recording_error, s.created_at " + baseQuery
 
@@ -90,6 +97,15 @@ func (r *VODRepo) SearchVODs(ctx context.Context, params domain.SearchParams) (*
 		countQuery += filter
 		dataQuery += filter
 		args = append(args, "%"+params.Query+"%")
+		argIdx++
+	}
+
+	// User ID filter
+	if params.UserID != "" {
+		filter := fmt.Sprintf(" AND s.user_id = $%d", argIdx)
+		countQuery += filter
+		dataQuery += filter
+		args = append(args, params.UserID)
 		argIdx++
 	}
 
@@ -150,7 +166,7 @@ func (r *VODRepo) IncrementViewCount(ctx context.Context, vodID string) error {
 }
 
 func scanVODs(rows pgx.Rows) ([]domain.VOD, error) {
-	var vods []domain.VOD
+	vods := make([]domain.VOD, 0)
 	for rows.Next() {
 		var v domain.VOD
 		if err := rows.Scan(
