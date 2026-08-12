@@ -79,7 +79,7 @@ func (s *StreamService) pollSRS(ctx context.Context, seen map[string]bool) {
 		if title != "" {
 			streamTitle = &title
 		}
-		stream, err := s.repo.CreateStream(ctx, userID, streamTitle, 0, hlsPath)
+		stream, err := s.repo.CreateStream(ctx, userID, streamTitle, "", hlsPath)
 		if err != nil {
 			s.errorLog("srs poller: create stream", "err", err, "user_id", userID)
 			continue

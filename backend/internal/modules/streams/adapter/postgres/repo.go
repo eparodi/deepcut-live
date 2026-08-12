@@ -20,7 +20,7 @@ func NewStreamRepo(pool *pgxpool.Pool) *StreamRepo {
 	return &StreamRepo{pool: pool}
 }
 
-func (r *StreamRepo) CreateStream(ctx context.Context, userID string, title *string, srsClientID int, hlsPath string) (*domain.Stream, error) {
+func (r *StreamRepo) CreateStream(ctx context.Context, userID string, title *string, srsClientID string, hlsPath string) (*domain.Stream, error) {
 	var s domain.Stream
 	err := r.pool.QueryRow(ctx, `
 		INSERT INTO streams (user_id, title, status, srs_client_id, hls_path)
@@ -109,7 +109,7 @@ func (r *StreamRepo) GetStreamByUserID(ctx context.Context, userID string) (*dom
 	return &s, nil
 }
 
-func (r *StreamRepo) GetStreamBySRSClientID(ctx context.Context, srsClientID int) (*domain.Stream, error) {
+func (r *StreamRepo) GetStreamBySRSClientID(ctx context.Context, srsClientID string) (*domain.Stream, error) {
 	var s domain.Stream
 	err := r.pool.QueryRow(ctx, `
 		SELECT id, user_id, title, started_at, ended_at, status,
@@ -123,7 +123,7 @@ func (r *StreamRepo) GetStreamBySRSClientID(ctx context.Context, srsClientID int
 		&s.PeakViewers, &s.TotalViewers, &s.DurationSeconds, &s.SRSClientID, &s.CreatedAt,
 	)
 	if err == pgx.ErrNoRows {
-		return nil, errs.NotFound("stream with srs_client_id %d not found", srsClientID)
+		return nil, errs.NotFound("stream with srs_client_id %s not found", srsClientID)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("query stream by srs_client_id: %w", err)

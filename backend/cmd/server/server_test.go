@@ -636,7 +636,7 @@ func TestStreamLifecycle(t *testing.T) {
 
 	// 1. Simulate on_publish
 	publishBody := fmt.Sprintf(
-		`{"action":"on_publish","client_id":1,"stream":"%s","ip":"127.0.0.1","vhost":"__defaultVhost__","app":"live"}`,
+		`{"action":"on_publish","client_id":"srs-conn-test","stream":"%s","ip":"127.0.0.1","vhost":"__defaultVhost__","app":"live"}`,
 		streamKey,
 	)
 	req, _ := http.NewRequest(http.MethodPost,
@@ -671,7 +671,7 @@ func TestStreamLifecycle(t *testing.T) {
 	// was stored in recordingPaths. OnStreamEnd will retrieve it.
 
 	// 2. Simulate on_unpublish
-	unpublishBody := `{"action":"on_unpublish","client_id":1}`
+	unpublishBody := `{"action":"on_unpublish","client_id":"srs-conn-test"}`
 	req, _ = http.NewRequest(http.MethodPost,
 		srv.URL+"/api/srs/callback?secret=test-srs-secret",
 		strings.NewReader(unpublishBody))
@@ -945,7 +945,7 @@ func simulateStreamLifecycle(t *testing.T, client *http.Client, srvURL, streamKe
 
 	// on_publish
 	publishBody := fmt.Sprintf(
-		`{"action":"on_publish","client_id":999,"stream":"%s","ip":"127.0.0.1","vhost":"__defaultVhost__","app":"live"}`,
+		`{"action":"on_publish","client_id":"srs-conn-999","stream":"%s","ip":"127.0.0.1","vhost":"__defaultVhost__","app":"live"}`,
 		streamKey,
 	)
 	req, _ := http.NewRequest(http.MethodPost,
@@ -972,7 +972,7 @@ func simulateStreamLifecycle(t *testing.T, client *http.Client, srvURL, streamKe
 	}
 
 	// on_unpublish
-	unpublishBody := `{"action":"on_unpublish","client_id":999}`
+	unpublishBody := `{"action":"on_unpublish","client_id":"srs-conn-999"}`
 	req, _ = http.NewRequest(http.MethodPost,
 		srvURL+"/api/srs/callback?secret=test-srs-secret",
 		strings.NewReader(unpublishBody))

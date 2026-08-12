@@ -1,6 +1,7 @@
 package application
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -49,24 +50,36 @@ func (s *StreamService) startRecording(streamID, streamKey string) string {
 				"-reconnect_delay_max", "2",
 				"-i", hlsURL,
 				"-c", "copy",
+				"-bsf:a", "aac_adtstoasc",
 				"-movflags", "frag_keyframe+empty_moov+default_base_moof",
 				"-f", "mp4",
 				recordingPath,
 				"-y",
 			)
-			cmd.Stderr = nil
+			var stderr bytes.Buffer
+			cmd.Stderr = &stderr
 			err := cmd.Run()
 			if ctx.Err() != nil {
 				return // stream ended, stop retrying
 			}
 			if err != nil {
-				s.warnLog("vod recording attempt failed, retrying", "err", err, "stream_id", streamID)
+				s.warnLog("vod recording attempt failed, retrying",
+					"err", err, "stream_id", streamID, "ffmpeg_stderr", tail(stderr.String(), 500))
 				time.Sleep(2 * time.Second)
 			}
 		}
 	}()
 
 	return recordingPath
+}
+
+// tail returns the last n characters of s, used to log ffmpeg stderr without
+// flooding logs with the full output.
+func tail(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[len(s)-n:]
 }
 
 // stopRecording stops the ffmpeg recording goroutine for a stream.

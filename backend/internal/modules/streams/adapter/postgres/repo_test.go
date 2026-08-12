@@ -51,7 +51,7 @@ func TestStreamRepo_CreateStream(t *testing.T) {
 	userID := seedUserRaw(t, ctx, repo, "g-stream-create", "create@test.com", "Create User")
 
 	title := "Test Stream"
-	stream, err := repo.CreateStream(ctx, userID, &title, 1001, "/hls/live/test.m3u8")
+	stream, err := repo.CreateStream(ctx, userID, &title, "srs-conn-1001", "/hls/live/test.m3u8")
 	if err != nil {
 		t.Fatalf("CreateStream: %v", err)
 	}
@@ -64,8 +64,8 @@ func TestStreamRepo_CreateStream(t *testing.T) {
 	if stream.Title == nil || *stream.Title != "Test Stream" {
 		t.Fatalf("title = %v, want 'Test Stream'", stream.Title)
 	}
-	if stream.SRSClientID == nil || *stream.SRSClientID != 1001 {
-		t.Fatalf("srs_client_id = %v, want 1001", stream.SRSClientID)
+	if stream.SRSClientID == nil || *stream.SRSClientID != "srs-conn-1001" {
+		t.Fatalf("srs_client_id = %v, want srs-conn-1001", stream.SRSClientID)
 	}
 	if stream.ID == "" {
 		t.Fatal("expected non-empty stream ID")
@@ -82,7 +82,7 @@ func TestStreamRepo_EndStream(t *testing.T) {
 	userID := seedUserRaw(t, ctx, repo, "g-stream-end", "end@test.com", "End User")
 
 	title := "Stream to End"
-	stream, err := repo.CreateStream(ctx, userID, &title, 1002, "/hls/live/test.m3u8")
+	stream, err := repo.CreateStream(ctx, userID, &title, "srs-conn-1002", "/hls/live/test.m3u8")
 	if err != nil {
 		t.Fatalf("CreateStream: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestStreamRepo_UpdateStreamStatus(t *testing.T) {
 	userID := seedUserRaw(t, ctx, repo, "g-stream-status", "status@test.com", "Status User")
 
 	title := "Status Stream"
-	stream, err := repo.CreateStream(ctx, userID, &title, 1003, "/hls/live/test.m3u8")
+	stream, err := repo.CreateStream(ctx, userID, &title, "srs-conn-1003", "/hls/live/test.m3u8")
 	if err != nil {
 		t.Fatalf("CreateStream: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestStreamRepo_GetStreamByUserID(t *testing.T) {
 
 	t.Run("found", func(t *testing.T) {
 		title := "Found Stream"
-		created, err := repo.CreateStream(ctx, userID, &title, 2001, "/hls/live/test.m3u8")
+		created, err := repo.CreateStream(ctx, userID, &title, "srs-conn-2001", "/hls/live/test.m3u8")
 		if err != nil {
 			t.Fatalf("CreateStream: %v", err)
 		}
@@ -183,12 +183,12 @@ func TestStreamRepo_GetStreamBySRSClientID(t *testing.T) {
 
 	t.Run("found", func(t *testing.T) {
 		title := "SRS Stream"
-		created, err := repo.CreateStream(ctx, userID, &title, 9999, "/hls/live/test.m3u8")
+		created, err := repo.CreateStream(ctx, userID, &title, "srs-conn-9999", "/hls/live/test.m3u8")
 		if err != nil {
 			t.Fatalf("CreateStream: %v", err)
 		}
 
-		got, err := repo.GetStreamBySRSClientID(ctx, 9999)
+		got, err := repo.GetStreamBySRSClientID(ctx, "srs-conn-9999")
 		if err != nil {
 			t.Fatalf("GetStreamBySRSClientID: %v", err)
 		}
@@ -198,7 +198,7 @@ func TestStreamRepo_GetStreamBySRSClientID(t *testing.T) {
 	})
 
 	t.Run("not found", func(t *testing.T) {
-		_, err := repo.GetStreamBySRSClientID(ctx, -1)
+		_, err := repo.GetStreamBySRSClientID(ctx, "srs-conn-nonexistent")
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -220,7 +220,7 @@ func TestStreamRepo_ListLiveStreams(t *testing.T) {
 		userID := seedUserRaw(t, ctx, repo, "g-list-live", "listlive@test.com", "List Live User")
 
 		title := "Live Stream"
-		_, err := repo.CreateStream(ctx, userID, &title, 3001, "/hls/live/test.m3u8")
+		_, err := repo.CreateStream(ctx, userID, &title, "srs-conn-3001", "/hls/live/test.m3u8")
 		if err != nil {
 			t.Fatalf("CreateStream: %v", err)
 		}
@@ -292,7 +292,7 @@ func TestStreamRepo_UpsertViewer(t *testing.T) {
 	userID := seedUserRaw(t, ctx, repo, "g-viewer", "viewer@test.com", "Viewer User")
 
 	title := "Viewer Stream"
-	stream, err := repo.CreateStream(ctx, userID, &title, 4001, "/hls/live/test.m3u8")
+	stream, err := repo.CreateStream(ctx, userID, &title, "srs-conn-4001", "/hls/live/test.m3u8")
 	if err != nil {
 		t.Fatalf("CreateStream: %v", err)
 	}
@@ -339,7 +339,7 @@ func TestStreamRepo_HeartbeatViewer(t *testing.T) {
 	userID := seedUserRaw(t, ctx, repo, "g-heartbeat", "heartbeat@test.com", "Heartbeat User")
 
 	title := "Heartbeat Stream"
-	stream, err := repo.CreateStream(ctx, userID, &title, 5001, "/hls/live/test.m3u8")
+	stream, err := repo.CreateStream(ctx, userID, &title, "srs-conn-5001", "/hls/live/test.m3u8")
 	if err != nil {
 		t.Fatalf("CreateStream: %v", err)
 	}
@@ -347,7 +347,7 @@ func TestStreamRepo_HeartbeatViewer(t *testing.T) {
 	t.Run("updates existing", func(t *testing.T) {
 		// Re-create stream after truncate
 		userID2 := seedUserRaw(t, ctx, repo, "g-heartbeat2", "hb2@test.com", "HB User 2")
-		stream2, err := repo.CreateStream(ctx, userID2, &title, 5002, "/hls/live/test.m3u8")
+		stream2, err := repo.CreateStream(ctx, userID2, &title, "srs-conn-5002", "/hls/live/test.m3u8")
 		if err != nil {
 			t.Fatalf("CreateStream: %v", err)
 		}
@@ -383,7 +383,7 @@ func TestStreamRepo_RemoveViewer(t *testing.T) {
 	userID := seedUserRaw(t, ctx, repo, "g-remove", "remove@test.com", "Remove User")
 
 	title := "Remove Stream"
-	stream, err := repo.CreateStream(ctx, userID, &title, 6001, "/hls/live/test.m3u8")
+	stream, err := repo.CreateStream(ctx, userID, &title, "srs-conn-6001", "/hls/live/test.m3u8")
 	if err != nil {
 		t.Fatalf("CreateStream: %v", err)
 	}
@@ -424,7 +424,7 @@ func TestStreamRepo_GetViewerCount(t *testing.T) {
 	userID := seedUserRaw(t, ctx, repo, "g-vcount", "vcount@test.com", "VCount User")
 
 	title := "VCount Stream"
-	stream, err := repo.CreateStream(ctx, userID, &title, 7001, "/hls/live/test.m3u8")
+	stream, err := repo.CreateStream(ctx, userID, &title, "srs-conn-7001", "/hls/live/test.m3u8")
 	if err != nil {
 		t.Fatalf("CreateStream: %v", err)
 	}

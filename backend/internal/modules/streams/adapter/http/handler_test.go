@@ -22,8 +22,8 @@ import (
 
 type mockStreamService struct {
 	verifySRSSecretFn func(secret string) error
-	onStreamStartFn   func(ctx context.Context, rawKey string, srsClientID int, title string) (*domain.Stream, error)
-	onStreamEndFn     func(ctx context.Context, srsClientID int, hlsPath, recordingPath string, durationSeconds int) error
+	onStreamStartFn   func(ctx context.Context, rawKey string, srsClientID string, title string) (*domain.Stream, error)
+	onStreamEndFn     func(ctx context.Context, srsClientID string, hlsPath, recordingPath string, durationSeconds int) error
 	listLiveFn        func(ctx context.Context) ([]domain.LiveStream, error)
 	getChannelInfoFn  func(ctx context.Context, userID string) (*domain.ChannelInfo, error)
 	heartbeatViewerFn func(ctx context.Context, streamID, userID, clientID string) error
@@ -36,14 +36,14 @@ func (m *mockStreamService) VerifySRSSecret(secret string) error {
 	return nil
 }
 
-func (m *mockStreamService) OnStreamStart(ctx context.Context, rawKey string, srsClientID int, title string) (*domain.Stream, error) {
+func (m *mockStreamService) OnStreamStart(ctx context.Context, rawKey string, srsClientID string, title string) (*domain.Stream, error) {
 	if m.onStreamStartFn != nil {
 		return m.onStreamStartFn(ctx, rawKey, srsClientID, title)
 	}
 	return &domain.Stream{ID: "stream-1", UserID: "user-1"}, nil
 }
 
-func (m *mockStreamService) OnStreamEnd(ctx context.Context, srsClientID int, hlsPath, recordingPath string, durationSeconds int) error {
+func (m *mockStreamService) OnStreamEnd(ctx context.Context, srsClientID string, hlsPath, recordingPath string, durationSeconds int) error {
 	if m.onStreamEndFn != nil {
 		return m.onStreamEndFn(ctx, srsClientID, hlsPath, recordingPath, durationSeconds)
 	}
@@ -98,17 +98,17 @@ func TestSRSCallback(t *testing.T) {
 	}{
 		{
 			name:     "on_publish action",
-			body:     `{"action":"on_publish","client_id":1,"param":"?secret=valid&key=sk-abc"}`,
+			body:     `{"action":"on_publish","client_id":"srs-conn-1","param":"?secret=valid&key=sk-abc"}`,
 			wantCode: http.StatusOK,
 		},
 		{
 			name:     "on_unpublish action",
-			body:     `{"action":"on_unpublish","client_id":1}`,
+			body:     `{"action":"on_unpublish","client_id":"srs-conn-1"}`,
 			wantCode: http.StatusOK,
 		},
 		{
 			name:     "unknown action",
-			body:     `{"action":"unknown","client_id":1}`,
+			body:     `{"action":"unknown","client_id":"srs-conn-1"}`,
 			wantCode: http.StatusOK,
 			wantBody: "0",
 		},
@@ -164,19 +164,19 @@ func TestSRSOnPublish(t *testing.T) {
 	}{
 		{
 			name:     "happy path — stream field (standard OBS)",
-			body:     `{"action":"on_publish","client_id":1,"stream":"sk-abc","ip":"192.168.1.100","vhost":"__defaultVhost__","app":"live","param":""}`,
+			body:     `{"action":"on_publish","client_id":"srs-conn-1","stream":"sk-abc","ip":"192.168.1.100","vhost":"__defaultVhost__","app":"live","param":""}`,
 			secret:   "valid-secret",
 			wantCode: http.StatusOK,
 		},
 		{
 			name:     "happy path — param fallback (legacy)",
-			body:     `{"action":"on_publish","client_id":1,"param":"?key=sk-abc"}`,
+			body:     `{"action":"on_publish","client_id":"srs-conn-1","param":"?key=sk-abc"}`,
 			secret:   "valid-secret",
 			wantCode: http.StatusOK,
 		},
 		{
 			name:   "invalid srs secret",
-			body:   `{"action":"on_publish","client_id":1,"stream":"sk-abc"}`,
+			body:   `{"action":"on_publish","client_id":"srs-conn-1","stream":"sk-abc"}`,
 			secret: "bad-secret",
 			setupMock: func(m *mockStreamService) {
 				m.verifySRSSecretFn = func(secret string) error {
@@ -193,10 +193,10 @@ func TestSRSOnPublish(t *testing.T) {
 		},
 		{
 			name:   "on stream start error",
-			body:   `{"action":"on_publish","client_id":1,"stream":"bad-key"}`,
+			body:   `{"action":"on_publish","client_id":"srs-conn-1","stream":"bad-key"}`,
 			secret: "valid-secret",
 			setupMock: func(m *mockStreamService) {
-				m.onStreamStartFn = func(ctx context.Context, rawKey string, srsClientID int, title string) (*domain.Stream, error) {
+				m.onStreamStartFn = func(ctx context.Context, rawKey string, srsClientID string, title string) (*domain.Stream, error) {
 					return nil, errs.NotFound("user not found")
 				}
 			},
@@ -240,13 +240,13 @@ func TestSRSOnUnpublish(t *testing.T) {
 	}{
 		{
 			name:     "happy path",
-			body:     `{"action":"on_unpublish","client_id":1}`,
+			body:     `{"action":"on_unpublish","client_id":"srs-conn-1"}`,
 			secret:   "valid-secret",
 			wantCode: http.StatusOK,
 		},
 		{
 			name:   "invalid srs secret",
-			body:   `{"action":"on_unpublish","client_id":1}`,
+			body:   `{"action":"on_unpublish","client_id":"srs-conn-1"}`,
 			secret: "bad-secret",
 			setupMock: func(m *mockStreamService) {
 				m.verifySRSSecretFn = func(secret string) error {
@@ -263,10 +263,10 @@ func TestSRSOnUnpublish(t *testing.T) {
 		},
 		{
 			name:   "on stream end error",
-			body:   `{"action":"on_unpublish","client_id":1}`,
+			body:   `{"action":"on_unpublish","client_id":"srs-conn-1"}`,
 			secret: "valid-secret",
 			setupMock: func(m *mockStreamService) {
-				m.onStreamEndFn = func(ctx context.Context, srsClientID int, hlsPath, recordingPath string, durationSeconds int) error {
+				m.onStreamEndFn = func(ctx context.Context, srsClientID string, hlsPath, recordingPath string, durationSeconds int) error {
 					return errs.Internal("end failed")
 				}
 			},

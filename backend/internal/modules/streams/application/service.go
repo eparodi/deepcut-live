@@ -65,7 +65,7 @@ func (s *StreamService) AuthenticateStreamKey(ctx context.Context, rawKey string
 }
 
 // OnStreamStart handles the SRS on_publish callback: validates key, creates stream, marks user live.
-func (s *StreamService) OnStreamStart(ctx context.Context, rawKey string, srsClientID int, title string) (*domain.Stream, error) {
+func (s *StreamService) OnStreamStart(ctx context.Context, rawKey string, srsClientID string, title string) (*domain.Stream, error) {
 	userID, err := s.AuthenticateStreamKey(ctx, rawKey)
 	if err != nil {
 		return nil, fmt.Errorf("on stream start: %w", err)
@@ -107,13 +107,20 @@ func (s *StreamService) OnStreamStart(ctx context.Context, rawKey string, srsCli
 
 // OnStreamEnd handles the SRS on_unpublish callback: ends the stream, marks user offline,
 // and enqueues VOD processing if a recording path is available.
-func (s *StreamService) OnStreamEnd(ctx context.Context, srsClientID int, hlsPath, recordingPath string, durationSeconds int) error {
+func (s *StreamService) OnStreamEnd(ctx context.Context, srsClientID string, hlsPath, recordingPath string, durationSeconds int) error {
 	stream, err := s.repo.GetStreamBySRSClientID(ctx, srsClientID)
 	if err != nil {
 		return fmt.Errorf("on stream end: %w", err)
 	}
 
-	if err := s.repo.EndStream(ctx, stream.ID, hlsPath, recordingPath, durationSeconds); err != nil {
+	// SRS doesn't send duration in the on_unpublish callback; compute it
+	// from the start time when the caller didn't provide one.
+	duration := durationSeconds
+	if duration <= 0 && !stream.StartedAt.IsZero() {
+		duration = int(time.Since(stream.StartedAt).Seconds())
+	}
+
+	if err := s.repo.EndStream(ctx, stream.ID, hlsPath, recordingPath, duration); err != nil {
 		return fmt.Errorf("end stream: %w", err)
 	}
 
@@ -137,7 +144,7 @@ func (s *StreamService) OnStreamEnd(ctx context.Context, srsClientID int, hlsPat
 
 	// Update analytics
 	date := time.Now().Format("2006-01-02")
-	if err := s.repo.UpdateStreamAnalytics(ctx, stream.UserID, date, durationSeconds, stream.PeakViewers, stream.TotalViewers); err != nil {
+	if err := s.repo.UpdateStreamAnalytics(ctx, stream.UserID, date, duration, stream.PeakViewers, stream.TotalViewers); err != nil {
 		slog.Error("failed to update stream analytics", "err", err, "stream_id", stream.ID)
 	}
 
@@ -177,7 +184,7 @@ func (s *StreamService) handleRecording(ctx context.Context, streamID, recording
 }
 
 // OnStreamInterrupted marks a stream as interrupted.
-func (s *StreamService) OnStreamInterrupted(ctx context.Context, srsClientID int) error {
+func (s *StreamService) OnStreamInterrupted(ctx context.Context, srsClientID string) error {
 	stream, err := s.repo.GetStreamBySRSClientID(ctx, srsClientID)
 	if err != nil {
 		return fmt.Errorf("on stream interrupted: %w", err)
@@ -291,9 +298,9 @@ func (s *StreamService) ForceEndStream(ctx context.Context, userID string) (stri
 }
 
 // disconnectSRSClient sends a DELETE to SRS to drop the publisher connection.
-func (s *StreamService) disconnectSRSClient(ctx context.Context, clientID int) error {
+func (s *StreamService) disconnectSRSClient(ctx context.Context, clientID string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete,
-		fmt.Sprintf("%s/api/v1/clients/%d", s.srsAPIURL, clientID), nil)
+		fmt.Sprintf("%s/api/v1/clients/%s", s.srsAPIURL, clientID), nil)
 	if err != nil {
 		return fmt.Errorf("build srs request: %w", err)
 	}
