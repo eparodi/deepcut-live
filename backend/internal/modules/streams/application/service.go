@@ -74,6 +74,11 @@ func (s *StreamService) OnStreamStart(ctx context.Context, rawKey string, srsCli
 	var t *string
 	if title != "" {
 		t = &title
+	} else {
+		// Fetch user's stream title from settings (same as poller)
+		if userTitle, _, err := s.authRepo.GetStreamSettings(ctx, userID); err == nil && userTitle != "" {
+			t = &userTitle
+		}
 	}
 
 	// Construct the HLS playlist URL. SRS writes HLS files by default to
