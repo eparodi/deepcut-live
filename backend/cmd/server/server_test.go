@@ -990,3 +990,48 @@ func simulateStreamLifecycle(t *testing.T, client *http.Client, srvURL, streamKe
 
 	return streamID
 }
+
+// ---------------------------------------------------------------------------
+// TestFailedVODsExcluded — failed recordings don't appear in search
+// ---------------------------------------------------------------------------
+
+func TestFailedVODsExcluded(t *testing.T) {
+	testutil.SkipOnShort(t)
+	srv, cleanup := setupTestServer(t)
+	t.Cleanup(cleanup)
+
+	userID := uuid.New().String()
+	streamKey := "failed-vod-test-key"
+	sum := sha256.Sum256([]byte(streamKey))
+	keyHash := hex.EncodeToString(sum[:])
+
+	testPool.Exec(context.Background(),
+		`INSERT INTO users (id, google_id, email, name, stream_key_hash)
+		 VALUES ($1, $2, $3, $4, $5)`,
+		userID, "g-"+userID[:8], "failed@test.com", "Failed Tester", keyHash)
+
+	client := srv.Client()
+	streamID := simulateStreamLifecycle(t, client, srv.URL, streamKey, userID)
+
+	// Mark the VOD as failed
+	testPool.Exec(context.Background(),
+		`UPDATE streams SET recording_status = 'failed', recording_error = 'No recording available' WHERE id = $1`, streamID)
+
+	// Search should NOT include the failed VOD
+	resp, err := client.Get(srv.URL + "/api/vods?sort=recent&limit=10")
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		VODs       []map[string]any `json:"vods"`
+		TotalCount int              `json:"totalCount"`
+	}
+	json.NewDecoder(resp.Body).Decode(&result)
+
+	if result.TotalCount != 0 {
+		t.Errorf("failed VOD appeared in search: totalCount=%d, want 0", result.TotalCount)
+	}
+	t.Logf("failed VOD correctly excluded from search ✅")
+}

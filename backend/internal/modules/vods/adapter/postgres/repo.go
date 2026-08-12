@@ -78,6 +78,12 @@ func (r *VODRepo) SearchVODs(ctx context.Context, params domain.SearchParams) (*
 		JOIN users u ON s.user_id = u.id
 		WHERE s.status = 'offline'`
 
+	// Exclude failed recordings by default — nothing to watch.
+	// Explicit status=failed requests can override this.
+	if params.Status == "" {
+		baseQuery += " AND s.recording_status != 'failed'"
+	}
+
 	countQuery := "SELECT COUNT(*) " + baseQuery
 	dataQuery := "SELECT s.id, s.user_id, u.name, u.avatar_url, s.title, s.started_at, s.ended_at, s.duration_seconds, s.peak_viewers, s.total_viewers, s.recording_path, s.recording_status, s.vod_hls_path, s.vod_thumbnail_path, s.recording_error, s.created_at " + baseQuery
 
