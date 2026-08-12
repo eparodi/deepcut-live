@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 )
@@ -21,13 +20,7 @@ func (s *StreamService) startLiveThumbnail(streamID, streamKey string) {
 	liveThumbnails.Store(streamID, cancel)
 
 	// Derive SRS HTTP URL from the API URL (e.g. http://srs:1985 → http://srs:8080)
-	srsHTTP := "http://localhost:8080"
-	if s.srsAPIURL != "" {
-		srsHTTP = strings.Replace(s.srsAPIURL, ":1985", ":8080", 1)
-		if srsHTTP == s.srsAPIURL {
-			srsHTTP = s.srsAPIURL + ":8080"
-		}
-	}
+	srsHTTP := srsHTTPURL(s.srsAPIURL)
 
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)

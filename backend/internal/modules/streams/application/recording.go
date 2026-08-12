@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 )
@@ -31,15 +30,7 @@ func (s *StreamService) startRecording(streamID, streamKey string) string {
 	recordingPath := filepath.Join("/data/recordings", streamID+".ts")
 	os.MkdirAll(filepath.Dir(recordingPath), 0o755) // best-effort, may fail in test
 
-	srsHTTP := "http://localhost:8080"
-	if s.srsAPIURL != "" {
-		srsHTTP = strings.Replace(s.srsAPIURL, ":1985", ":8080", 1)
-		if srsHTTP == s.srsAPIURL {
-			srsHTTP = s.srsAPIURL + ":8080"
-		}
-	}
-
-	hlsURL := fmt.Sprintf("%s/live/%s.m3u8", srsHTTP, streamKey)
+	hlsURL := fmt.Sprintf("%s/live/%s.m3u8", srsHTTPURL(s.srsAPIURL), streamKey)
 
 	go func() {
 		defer streamRecordings.Delete(streamID)

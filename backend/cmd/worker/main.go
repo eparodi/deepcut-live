@@ -79,7 +79,7 @@ func main() {
 	if err := client.Stop(context.Background()); err != nil {
 		logger.Error("client stop failed", "err", err)
 	}
-	fmt.Println("worker shut down gracefully")
+	logger.Info("worker shut down gracefully")
 }
 
 func migrateRiverSchema(pool *pgxpool.Pool, logger *slog.Logger) error {
