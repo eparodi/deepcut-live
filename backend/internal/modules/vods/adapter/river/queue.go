@@ -25,21 +25,36 @@ type Queue struct {
 // insertion only — job processing happens in cmd/worker.
 func NewQueue(pool *pgxpool.Pool) (*Queue, error) {
 	maxWorkers := envInt("VOD_QUEUE_MAX_WORKERS", 1)
+
+	// Register the job kind with a no-op worker. River requires the kind
+	// to be registered before Insert, even though this client never runs
+	// workers (processing happens in cmd/worker).
+	workers := river.NewWorkers()
+	river.AddWorker[domain.VODProcessArgs](workers, &noopWorker{})
+
 	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
 		Queues: map[string]river.QueueConfig{
 			// River requires at least 1 worker per queue even though this
 			// client only inserts jobs (processing happens in cmd/worker).
 			river.QueueDefault: {MaxWorkers: maxWorkers},
 		},
-		// River requires Workers to be set whenever Queues is set.
-		// Empty set — this client never processes jobs.
-		Workers: river.NewWorkers(),
+		Workers: workers,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("river new client: %w", err)
 	}
 
 	return &Queue{client: client}, nil
+}
+
+// noopWorker satisfies River's Worker interface for kind registration.
+// Never actually runs — the backend client only inserts jobs.
+type noopWorker struct {
+	river.WorkerDefaults[domain.VODProcessArgs]
+}
+
+func (w *noopWorker) Work(ctx context.Context, job *river.Job[domain.VODProcessArgs]) error {
+	return fmt.Errorf("noop worker should never run")
 }
 
 // envInt reads an integer environment variable with a default fallback.
