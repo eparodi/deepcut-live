@@ -24,7 +24,9 @@ type Queue struct {
 func NewQueue(pool *pgxpool.Pool) (*Queue, error) {
 	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
 		Queues: map[string]river.QueueConfig{
-			river.QueueDefault: {MaxWorkers: 0}, // no workers in main server
+			// River requires at least 1 worker per queue even though this
+			// client only inserts jobs (processing happens in cmd/worker).
+			river.QueueDefault: {MaxWorkers: 1},
 		},
 	})
 	if err != nil {
