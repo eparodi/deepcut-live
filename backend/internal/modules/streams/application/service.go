@@ -8,12 +8,16 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/deepcut/live/internal/modules/streams/domain"
 	voddomain "github.com/deepcut/live/internal/modules/vods/domain"
 	"github.com/deepcut/live/internal/shared/errs"
 )
+
+// recordingPaths tracks the recording file path for each active stream.
+var recordingPaths sync.Map // map[string]string (streamID → path)
 
 type StreamService struct {
 	repo      domain.StreamRepository
@@ -88,9 +92,10 @@ func (s *StreamService) OnStreamStart(ctx context.Context, rawKey string, srsCli
 
 	if s.hub != nil {
 		s.hub.NotifyStreamStarted(userID, stream.ID)
+	}
 
 	s.startLiveThumbnail(stream.ID, rawKey)
-	}
+	recordingPaths.Store(stream.ID, s.startRecording(stream.ID, rawKey))
 
 	return stream, nil
 }
@@ -113,8 +118,16 @@ func (s *StreamService) OnStreamEnd(ctx context.Context, srsClientID int, hlsPat
 
 	if s.hub != nil {
 		s.hub.NotifyStreamEnded(stream.UserID)
+	}
 
 	s.stopLiveThumbnail(stream.ID)
+	s.stopRecording(stream.ID)
+
+	// Use ffmpeg recording path over SRS callback path
+	recPath := recordingPath
+	if stored, ok := recordingPaths.Load(stream.ID); ok {
+		recPath = stored.(string)
+		recordingPaths.Delete(stream.ID)
 	}
 
 	// Update analytics
@@ -124,7 +137,7 @@ func (s *StreamService) OnStreamEnd(ctx context.Context, srsClientID int, hlsPat
 	}
 
 	// Set recording status and enqueue VOD processing job
-	s.handleRecording(ctx, stream.ID, recordingPath)
+	s.handleRecording(ctx, stream.ID, recPath)
 
 	return nil
 }
@@ -173,7 +186,7 @@ func (s *StreamService) OnStreamInterrupted(ctx context.Context, srsClientID int
 	if s.hub != nil {
 		s.hub.NotifyStreamEnded(stream.UserID)
 
-	s.stopLiveThumbnail(stream.ID)
+		s.stopLiveThumbnail(stream.ID)
 	}
 	return nil
 }
