@@ -2,9 +2,9 @@ package river
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strconv"
-	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -31,6 +31,9 @@ func NewQueue(pool *pgxpool.Pool) (*Queue, error) {
 			// client only inserts jobs (processing happens in cmd/worker).
 			river.QueueDefault: {MaxWorkers: maxWorkers},
 		},
+		// River requires Workers to be set whenever Queues is set.
+		// Empty set — this client never processes jobs.
+		Workers: river.NewWorkers(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("river new client: %w", err)

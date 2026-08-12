@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 // streamRecordings tracks active ffmpeg recording goroutines by stream ID.
@@ -35,20 +36,33 @@ func (s *StreamService) startRecording(streamID, streamKey string) string {
 	go func() {
 		defer streamRecordings.Delete(streamID)
 
-		// Fragmented MP4 (frag_keyframe+empty_moov) — every fragment is
-		// independently playable, so killing ffmpeg mid-stream (SIGKILL
-		// from CommandContext cancel) still leaves a valid file.
-		cmd := exec.CommandContext(ctx, "ffmpeg",
-			"-i", hlsURL,
-			"-c", "copy",
-			"-movflags", "frag_keyframe+empty_moov+default_base_moof",
-			"-f", "mp4",
-			recordingPath,
-			"-y",
-		)
-		cmd.Stderr = nil
-		if err := cmd.Run(); err != nil && ctx.Err() == nil {
-			s.warnLog("vod recording failed", "err", err, "stream_id", streamID)
+		// Retry loop: ffmpeg may exit if the HLS playlist isn't ready yet.
+		// Restart until the stream ends (context cancelled).
+		for ctx.Err() == nil {
+			// Fragmented MP4 (frag_keyframe+empty_moov) — every fragment is
+			// independently playable, so killing ffmpeg mid-stream (SIGKILL
+			// from CommandContext cancel) still leaves a valid file.
+			// Reconnect flags retry the HLS playlist until SRS creates it.
+			cmd := exec.CommandContext(ctx, "ffmpeg",
+				"-reconnect", "1",
+				"-reconnect_streamed", "1",
+				"-reconnect_delay_max", "2",
+				"-i", hlsURL,
+				"-c", "copy",
+				"-movflags", "frag_keyframe+empty_moov+default_base_moof",
+				"-f", "mp4",
+				recordingPath,
+				"-y",
+			)
+			cmd.Stderr = nil
+			err := cmd.Run()
+			if ctx.Err() != nil {
+				return // stream ended, stop retrying
+			}
+			if err != nil {
+				s.warnLog("vod recording attempt failed, retrying", "err", err, "stream_id", streamID)
+				time.Sleep(2 * time.Second)
+			}
 		}
 	}()
 
