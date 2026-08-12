@@ -35,9 +35,13 @@ func (s *StreamService) startRecording(streamID, streamKey string) string {
 	go func() {
 		defer streamRecordings.Delete(streamID)
 
+		// Fragmented MP4 (frag_keyframe+empty_moov) — every fragment is
+		// independently playable, so killing ffmpeg mid-stream (SIGKILL
+		// from CommandContext cancel) still leaves a valid file.
 		cmd := exec.CommandContext(ctx, "ffmpeg",
 			"-i", hlsURL,
 			"-c", "copy",
+			"-movflags", "frag_keyframe+empty_moov+default_base_moof",
 			"-f", "mp4",
 			recordingPath,
 			"-y",
