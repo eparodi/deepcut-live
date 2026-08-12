@@ -600,3 +600,9 @@ byte zero if this becomes a requirement.
 (`frag_keyframe+empty_moov+default_base_moof`) keep the file playable when
 ffmpeg is SIGKILLed at stream end, and ffmpeg stderr is captured for
 logging (was silently discarded).
+9. **SRS `hls_ctx` must be disabled.** By default SRS wraps every playlist
+(including static VOD playlists) in a master playlist pointing at a
+root-absolute child URL (`/vods/...?...hls_ctx=...`). hls.js resolves that
+against the frontend origin, losing the `/hls` proxy prefix → 404. With
+`hls_ctx off`, SRS serves the raw playlist with relative segment URIs and
+both live and VOD playback work through the `/hls/*` rewrite.

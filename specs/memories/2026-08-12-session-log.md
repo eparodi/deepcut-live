@@ -17,6 +17,8 @@ Feature: VOD processing pipeline debugging (PR #23 branch `feat/browse-vod-disco
 | 9 | Corrupt MP4s after SIGKILL (moov atom missing) | Plain MP4 loses moov on kill | Fragmented MP4 flags (`frag_keyframe+empty_moov+default_base_moof`) |
 | 10 | Stale dev DB rows stuck in "processing" (25+ streams) | Enqueue failure during earlier broken runs | Marked `failed` with explanatory `recording_error`; removed junk recordings |
 | 11 | psql multi-statement `-c` rolled back silently | psql wraps multiple statements in one implicit transaction | Run one statement per invocation for destructive cleanup |
+| 12 | VOD player 404: browser requested `/vods/{id}/index.m3u8?hls_ctx=...` (no `/hls` prefix) | SRS `hls_ctx` (default on) wraps every playlist in a master playlist pointing at a **root-absolute** child URL `/vods/...?...hls_ctx=...`; hls.js resolves it against `localhost:3000`, losing the `/hls` proxy prefix | `hls_ctx off;` in `data/docker.conf` — SRS now serves the raw playlist with relative segment URIs. VOD **and** live playback verified through the `/hls/*` proxy (200) |
+| 13 | Random-key RTMP test push rejected with I/O error | Backend `on_publish` callback correctly rejects unknown stream keys (auth working as intended) | Use a DB-seeded test user key for simulated streams |
 
 ## Verified End-to-End (simulated OBS via host ffmpeg RTMP push)
 
