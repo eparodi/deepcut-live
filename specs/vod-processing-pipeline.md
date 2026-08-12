@@ -564,3 +564,39 @@ Phase 4:  Task 11 → {12, 13} → 14 → 15
 ```
 
 Total: 15 tasks across 4 phases. Backend + Worker = 10 tasks, Frontend = 5 tasks.
+
+## Implementation Notes
+
+Findings discovered during implementation that deviate from or clarify the
+approved design. Added by the engineering team, flagged for the PM.
+
+1. **SRS 5.0 dropped LL-HLS.** `hls_ll_enabled` / `hls_ll_fragment` no longer
+exist in SRS 5.0.213 (config validation fails with "illegal
+vhost.hls.hls_ll_enabled"). We use plain HLS with 2s fragments / 6-segment
+window instead. The `specs/hls-low-latency.md` LL-HLS tuning is not
+applicable on this SRS version.
+2. **The `ossrs/srs:5` image ignores `conf/srs.conf`.** Its entrypoint loads
+`conf/docker.conf`, so our tuned config must be mounted at
+`/usr/local/srs/conf/docker.conf` (see `data/docker.conf`). This is why
+earlier tuning attempts had no effect and why SRS defaulted to 10s
+fragments / 60s window.
+3. **SRS http_hooks `client_id` is a string** (connection id like
+`5u9c4d30`), not a number. `streams.srs_client_id` is now TEXT
+(migration 000004); `OnStreamStart`/`OnStreamEnd`/`disconnectSRSClient`
+all use string IDs.
+4. **Recording MP4 needs `-bsf:a aac_adtstoasc`.** SRS HLS segments carry
+ADTS-framed AAC; muxing TS→MP4 fails with "Malformed AAC bitstream"
+without the bitstream filter.
+5. **SRS `on_unpublish` sends many extra JSON fields** — the handler must
+not use `DisallowUnknownFields()` (same as `on_publish`).
+6. **SRS does not send duration in `on_unpublish`** — `OnStreamEnd` computes
+duration from `started_at` when the caller passes 0.
+7. **Recording start is delayed until the first HLS segment exists**
+(~2–5s after publish; the retry loop covers the 404 window). The first
+few seconds of a stream are not in the recording. Acceptable for v1;
+RTMP-pull recording (`rtmp://srs:1935/live/{key}`) would capture from
+byte zero if this becomes a requirement.
+8. **Recording robustness**: fragmented MP4 flags
+(`frag_keyframe+empty_moov+default_base_moof`) keep the file playable when
+ffmpeg is SIGKILLed at stream end, and ffmpeg stderr is captured for
+logging (was silently discarded).

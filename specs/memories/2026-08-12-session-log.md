@@ -1,0 +1,36 @@
+# Session Log — 2026-08-12
+
+Feature: VOD processing pipeline debugging (PR #23 branch `feat/browse-vod-discovery`).
+
+## Corrections & Root Causes
+
+| # | Symptom | Root Cause | Fix |
+|---|---------|-----------|-----|
+| 1 | VOD stuck in "processing" forever | Jobs never enqueued — River requires the job kind registered in the Workers bundle even on insert-only clients | `noopWorker` registration in `vods/adapter/river/queue.go` (commit 542ccdca); verified after redeploy |
+| 2 | Recording ffmpeg `exit status 8` (404) then `exit status 255` | (a) SRS runs with default 10s-fragment HLS so the playlist 404s for ~16s; (b) ADTS AAC in TS segments can't be muxed to MP4 without `-bsf:a aac_adtstoasc` | Mounted tuned config at `conf/docker.conf` (image ignores `srs.conf`), added `-bsf:a aac_adtstoasc` |
+| 3 | SRS config tuning had no effect (10s fragments, no callbacks) | `ossrs/srs:5` entrypoint loads `conf/docker.conf`, NOT `conf/srs.conf` | `data/docker.conf` mounted over `/usr/local/srs/conf/docker.conf` |
+| 4 | `illegal vhost.hls.hls_ll_enabled` — SRS failed to start | SRS 5.0 removed LL-HLS entirely (`hls_ll_enabled` no longer a valid directive) | Dropped LL directives; 2s fragments only |
+| 5 | `on_publish` rejected: `cannot unmarshal string into Go struct field .client_id of type int` | SRS 5 http_hooks send `client_id` as a string connection id | `srs_client_id` column → TEXT (migration 000004); service/handler/repo signatures → string |
+| 6 | `on_unpublish` returned 400 | Handler used `DisallowUnknownFields()` but SRS sends many extra fields | Removed `DisallowUnknownFields` (matches on_publish handler) |
+| 7 | `duration_seconds` always 0 | SRS doesn't send duration in the callback | `OnStreamEnd` computes from `started_at` when caller passes 0 |
+| 8 | ffmpeg errors invisible (stderr discarded) | `cmd.Stderr = nil` in recording goroutine | Capture stderr into buffer, log last 500 chars |
+| 9 | Corrupt MP4s after SIGKILL (moov atom missing) | Plain MP4 loses moov on kill | Fragmented MP4 flags (`frag_keyframe+empty_moov+default_base_moof`) |
+| 10 | Stale dev DB rows stuck in "processing" (25+ streams) | Enqueue failure during earlier broken runs | Marked `failed` with explanatory `recording_error`; removed junk recordings |
+| 11 | psql multi-statement `-c` rolled back silently | psql wraps multiple statements in one implicit transaction | Run one statement per invocation for destructive cleanup |
+
+## Verified End-to-End (simulated OBS via host ffmpeg RTMP push)
+
+- on_publish → stream created immediately with string `srs_client_id` ✓
+- Recording starts after first HLS segment (~2–5s), valid fragmented MP4 ✓
+- on_unpublish → 200, `duration_seconds` computed ✓
+- River job enqueued & processed by `cmd/worker` ✓
+- `recording_status` → `ready`, `vod_hls_path` + `vod_thumbnail_path` set ✓
+- VOD HLS served by SRS at `http://localhost:8080/vods/{id}/index.m3u8` (200) ✓
+- VOD thumbnail served (200) ✓
+
+## Follow-ups / Questions
+
+- [ ] First 2–5s of every stream is missing from the recording (HLS availability delay). RTMP-pull recording would capture from t=0 — worth a follow-up spec?
+- [ ] Worker transcode output prints image-sequence warning; `-update 1` would silence it (cosmetic).
+- [ ] `TestFailedVODsExcluded` + other integration tests passed before these changes — re-run full `cmd/server` integration suite to confirm.
+- [ ] River retention: completed/discarded jobs accumulate in `river_job` (8 rows now) — add a retention policy later.
