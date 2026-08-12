@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { VodView } from "./VodView";
 import type { VodDetail } from "@/types";
 
@@ -39,7 +39,6 @@ const baseVod: VodDetail = {
   createdAt: "2026-01-15T00:00:00Z",
   hlsUrl: null,
   thumbnailUrl: null,
-  viewerCount: 5000,
   recordingError: null,
 };
 
@@ -80,11 +79,12 @@ describe("VodView", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows failed message when provided", () => {
+  // Test-first: the backend sends recordingError, not message.
+  it("shows recordingError in the failed state", () => {
     const vod = {
       ...baseVod,
       recordingStatus: "failed" as const,
-      message: "Recording file corrupted",
+      recordingError: "Recording file corrupted",
     };
     render(<VodView vod={vod} hlsUrl={hlsUrl} />);
     expect(screen.getByText("Recording file corrupted")).toBeInTheDocument();
@@ -104,6 +104,13 @@ describe("VodView", () => {
     expect(screen.getByText("5k views")).toBeInTheDocument();
   });
 
+  // Test-first: sub-minute durations must not render as "0m".
+  it("formats sub-minute durations with seconds", () => {
+    const vod = { ...baseVod, durationSeconds: 45 };
+    render(<VodView vod={vod} hlsUrl={hlsUrl} />);
+    expect(screen.getByText("45s")).toBeInTheDocument();
+  });
+
   it("renders fallback title when title is null", () => {
     const vod = { ...baseVod, title: null };
     render(<VodView vod={vod} hlsUrl={hlsUrl} />);
@@ -114,6 +121,15 @@ describe("VodView", () => {
     render(<VodView vod={baseVod} hlsUrl={hlsUrl} />);
     const link = screen.getByText("TestStreamer").closest("a");
     expect(link).toHaveAttribute("href", "/channel/user-456");
+  });
+
+  // Test-first: rule 10.3 — every <img> with a potentially-missing src
+  // must have an onError fallback.
+  it("falls back to placeholder on avatar image error", () => {
+    render(<VodView vod={baseVod} hlsUrl={hlsUrl} />);
+    const img = screen.getByAltText("TestStreamer");
+    fireEvent.error(img);
+    expect(img).toHaveAttribute("src", expect.stringContaining("data:image/svg+xml"));
   });
 
   it("renders back link to search", () => {

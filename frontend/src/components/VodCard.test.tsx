@@ -95,6 +95,15 @@ describe("VodCard", () => {
     expect(img).toHaveAttribute("src", "https://example.com/avatar.jpg");
   });
 
+  // Test-first: rule 10.3 — every <img> with a potentially-missing src
+  // must have an onError fallback.
+  it("falls back to placeholder on avatar image error", () => {
+    render(<VodCard vod={baseVod} />);
+    const img = screen.getByAltText("TestStreamer");
+    fireEvent.error(img);
+    expect(img).toHaveAttribute("src", expect.stringContaining("data:image/svg+xml"));
+  });
+
   // ------------------------------------------------------------------------
   // Thumbnail behavior (test-first — written before the implementation)
   // ------------------------------------------------------------------------
