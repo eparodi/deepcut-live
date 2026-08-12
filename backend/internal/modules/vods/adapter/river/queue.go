@@ -36,6 +36,10 @@ func NewQueue(pool *pgxpool.Pool) (*Queue, error) {
 
 // Enqueue inserts a VOD processing job into the River queue.
 func (q *Queue) Enqueue(ctx context.Context, args domain.VODProcessArgs) error {
+	// Guard against typed-nil receiver (interface holding (*Queue)(nil))
+	if q == nil || q.client == nil {
+		return fmt.Errorf("vod queue not initialized")
+	}
 	_, err := q.client.Insert(ctx, &args, nil)
 	if err != nil {
 		return fmt.Errorf("river insert: %w", err)

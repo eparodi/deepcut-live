@@ -32,8 +32,9 @@ import (
 
 	vodhttp "github.com/deepcut/live/internal/modules/vods/adapter/http"
 	vodpg "github.com/deepcut/live/internal/modules/vods/adapter/postgres"
-	vodapp "github.com/deepcut/live/internal/modules/vods/application"
 	vodriver "github.com/deepcut/live/internal/modules/vods/adapter/river"
+	vodapp "github.com/deepcut/live/internal/modules/vods/application"
+	voddomain "github.com/deepcut/live/internal/modules/vods/domain"
 
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/riverqueue/river/rivermigrate"
@@ -86,10 +87,13 @@ func main() {
 	} else if _, migErr := migrator.Migrate(context.Background(), rivermigrate.DirectionUp, nil); migErr != nil {
 		slog.Warn("river migration failed", "err", migErr)
 	}
-	vodQueue, err := vodriver.NewQueue(pool)
+	// Declare as interface type so a nil concrete value stays nil
+	var vodQueue voddomain.VODQueue
+	q, err := vodriver.NewQueue(pool)
 	if err != nil {
 		slog.Warn("vod queue creation failed", "err", err)
-		vodQueue = nil
+	} else {
+		vodQueue = q
 	}
 	streamSvc := streamapp.NewStreamService(streamRepo, authRepo, streamHub, vodQueue, srsSecret, srsAPIURL, logger)
 	vodSvc := vodapp.NewVODService(vodRepo)
