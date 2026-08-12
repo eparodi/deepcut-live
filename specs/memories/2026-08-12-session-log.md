@@ -32,5 +32,5 @@ Feature: VOD processing pipeline debugging (PR #23 branch `feat/browse-vod-disco
 
 - [ ] First 2–5s of every stream is missing from the recording (HLS availability delay). RTMP-pull recording would capture from t=0 — worth a follow-up spec?
 - [ ] Worker transcode output prints image-sequence warning; `-update 1` would silence it (cosmetic).
-- [ ] `TestFailedVODsExcluded` + other integration tests passed before these changes — re-run full `cmd/server` integration suite to confirm.
+- [x] `TestFailedVODsExcluded` + other integration tests passed before these changes — re-run full `cmd/server` integration suite to confirm (ran `go test ./...` — all packages pass).
 - [ ] River retention: completed/discarded jobs accumulate in `river_job` (8 rows now) — add a retention policy later.
