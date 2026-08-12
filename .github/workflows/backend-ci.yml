@@ -87,7 +87,10 @@ jobs:
       - name: run migrations
         run: migrate -path db/migrations -database "$DATABASE_URL" up
       - name: go test (integration)
-        run: go test -count=1 ./...
+        # -p 1 serializes packages: they share one CI database and each
+        # package's TruncateAll would otherwise wipe other packages' rows
+        # mid-test (flaky FK violations / missing rows).
+        run: go test -p 1 -count=1 ./...
 
   # ── Migration Check ─────────────────────────────────────────────────
   migration-check:
