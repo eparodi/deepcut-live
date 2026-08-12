@@ -60,6 +60,7 @@ func (r *VODRepo) ListVODs(ctx context.Context, userID string, limit, offset int
 		FROM streams s
 		JOIN users u ON s.user_id = u.id
 		WHERE s.user_id = $1 AND s.status = 'offline'
+		  AND s.recording_status != 'failed'
 		ORDER BY s.created_at DESC
 		LIMIT $2 OFFSET $3`
 
