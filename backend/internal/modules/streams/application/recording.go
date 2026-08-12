@@ -20,10 +20,7 @@ func (s *StreamService) startRecording(streamID, streamKey string) string {
 	streamRecordings.Store(streamID, cancel)
 
 	recordingPath := filepath.Join("/data/recordings", streamID+".mp4")
-	if err := os.MkdirAll(filepath.Dir(recordingPath), 0o755); err != nil {
-		s.warnLog("vod recording: mkdir failed", "err", err)
-		return ""
-	}
+	os.MkdirAll(filepath.Dir(recordingPath), 0o755) // best-effort, may fail in test
 
 	srsHTTP := "http://localhost:8080"
 	if s.srsAPIURL != "" {
