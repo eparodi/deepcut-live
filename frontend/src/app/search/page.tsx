@@ -69,12 +69,12 @@ export default function SearchPage() {
         if (append && state.status === "results") {
           setState({ ...state, loadingMore: false });
         } else {
-          setState({ status: "error", query: q });
-        }
-      }
-    },
-    [state]
-  );
+          				setState({ status: "error", query: q });
+          			}
+          		}
+          	},
+          	[state, initialUserId]
+          );
 
   // Auto-search on initial load if ?q= or ?userId= is present
   useEffect(() => {
