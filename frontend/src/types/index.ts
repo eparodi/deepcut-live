@@ -131,10 +131,8 @@ export interface VodDetail {
   /** HLS playback URL (derived from recordingPath by the backend or frontend) */
   hlsUrl: string | null;
   thumbnailUrl: string | null;
-  viewerCount: number;
   recordingStatus: "pending" | "processing" | "ready" | "failed";
   recordingError: string | null;
-  message?: string;
 }
 
 /** Search response from GET /api/vods */

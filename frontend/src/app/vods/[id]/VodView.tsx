@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { ChatPanel } from "@/components/ChatPanel";
+import { AVATAR_FALLBACK } from "@/lib/fallbacks";
 import type { VodDetail } from "@/types";
 
 interface VodViewProps {
@@ -11,14 +12,18 @@ interface VodViewProps {
   hlsUrl: string;
 }
 
-/** Format duration in seconds to human-readable: 3661 → "1h 1m" */
+/** Format duration in seconds to human-readable: 3661 → "1h 1m", 45 → "45s" */
 function formatDuration(totalSeconds: number): string {
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
   if (hours > 0) {
     return `${hours}h ${minutes}m`;
   }
-  return `${minutes}m`;
+  if (minutes > 0) {
+    return `${minutes}m`;
+  }
+  return `${seconds}s`;
 }
 
 /** Format a viewer count for display: 1205 → "1.2k" */
@@ -117,9 +122,9 @@ export function VodView({ vod, hlsUrl }: VodViewProps) {
               <p className="text-lg text-[var(--color-text)] font-medium">
                 This recording is unavailable
               </p>
-              {vod.message && (
+              {vod.recordingError && (
                 <p className="mt-2 text-sm text-[var(--color-text-muted)]">
-                  {vod.message}
+                  {vod.recordingError}
                 </p>
               )}
             </div>
@@ -155,6 +160,11 @@ export function VodView({ vod, hlsUrl }: VodViewProps) {
                         alt={userName}
                         className="w-8 h-8 rounded-full"
                         referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.onerror = null; // prevent infinite loop
+                          target.src = AVATAR_FALLBACK;
+                        }}
                       />
                     ) : (
                       <div

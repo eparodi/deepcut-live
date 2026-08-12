@@ -41,8 +41,9 @@ export default async function VodPage({ params }: VodPageProps) {
     throw error;
   }
 
-  // Derive HLS URL from vod ID (served by SRS via Next.js proxy)
-  const hlsUrl = `/hls/vods/${id}/index.m3u8`;
+  // Prefer the backend-provided HLS URL (spec: use vod.hlsUrl); fall back
+  // to the path convention only when the API hasn't set it yet.
+  const hlsUrl = vod.hlsUrl ?? `/hls/vods/${id}/index.m3u8`;
 
   return <VodView vod={vod} hlsUrl={hlsUrl} />;
 }
