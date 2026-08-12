@@ -824,8 +824,11 @@ func (h *Handler) writePump(ctx context.Context, conn *websocket.Conn, client *d
 | Unbuffered `Send` channel | `make(chan []byte, 64)` |
 | Blocking broadcast (`c.Send <- data`) | Non-blocking `select/default` |
 | `conn.Close()` without status code | `conn.Close(websocket.StatusNormalClosure, "")` |
-| Manually `json.Marshal` then `conn.Write` | `wsjson.Write(ctx, conn, v)` |
+| Manually `json.Marshal` then `conn.Write` | `wsjson.Write(ctx, conn, v)` for structs; `conn.Write(ctx, websocket.MessageText, data)` for pre-marshaled `[]byte` (avoids double base64-encoding) |
 | Skip `InsecureSkipVerify` for local dev | Use `OriginPatterns: []string{"localhost:3000"}` to validate Origin headers. **Never** use `InsecureSkipVerify: true` — it disables CSWSH protection. |
+| Call `wsjson.Write` from `readPump` goroutine | Route ALL writes through `writePump` via `client.Send` channel — `nhooyr.io/websocket` does not support concurrent writes |
+| Return HTTP error before WebSocket upgrade | **Accept the WebSocket first**, then close with a meaningful code (e.g., `websocket.StatusCode(4001)` for "stream offline") so the browser can receive close codes instead of opaque HTTP errors that trigger infinite reconnect loops |
+| Register WS route inside `AuthMiddleware` when auth is optional | Register outside the auth group, extract credentials manually with `extractToken()`, and allow anonymous connections (read-only) while requiring auth to send messages |
 
 ### Testing WebSocket handlers
 
@@ -860,7 +863,9 @@ func TestWebSocket(t *testing.T) {
 ### Checklist for new WebSocket endpoints
 
 - [ ] Hub is a singleton wired in `main.go` (not created per-request)
-- [ ] Route registered inside an `AuthMiddleware` group
+- [ ] Route registered OUTSIDE `AuthMiddleware` if auth is optional; extract credentials manually
+- [ ] WebSocket accepted BEFORE application-level validation (so close codes reach the browser)
+- [ ] All writes routed through single `writePump` goroutine via `client.Send` channel
 - [ ] `Send` channel is buffered (`make(chan []byte, 64)`)
 - [ ] Broadcast uses non-blocking `select/default`
 - [ ] Context derived from `context.Background()`, not `r.Context()`
@@ -870,6 +875,7 @@ func TestWebSocket(t *testing.T) {
 - [ ] All injected dependencies nil-checked before use (hub, services)
 - [ ] Write goroutine has `defer recover()` for panic safety
 - [ ] Test uses `httptest.NewServer` + `websocket.Dial`
+- [ ] Test passes auth via `HTTPHeader` or context injection when WS route is outside auth group
 
 ### Third-Party Webhooks (SRS callbacks, Stripe, etc.)
 
@@ -883,9 +889,12 @@ When handling webhook callbacks from external services:
   dec.DisallowUnknownFields()
 
   // ✅ Only decode the fields you need, ignore the rest.
+  // SRS 5 sends client_id as a STRING connection id (e.g. "5u9c4d30"),
+  // not a number — always check the actual payload of the service version
+  // you run, not the docs of another version.
   var body struct {
       Action   string `json:"action"`
-      ClientID int    `json:"client_id"`
+      ClientID string `json:"client_id"`
       Stream   string `json:"stream"`
   }
   dec := json.NewDecoder(r.Body)
@@ -901,6 +910,65 @@ When handling webhook callbacks from external services:
   `hls_path /data/hls` may be overridden by Docker image defaults.
   Run `docker compose exec <svc> find / -name "*.m3u8"` to find where
   files actually land.
+
+### SRS Integration (ossrs/srs:5)
+
+Traps that cost days when working with SRS in Docker:
+
+- **The image loads `conf/docker.conf`, NOT `conf/srs.conf`.** The
+  entrypoint log line says exactly which file it read
+  (`SRS on aarch64, conf:conf/docker.conf`). Mount your custom config at
+  `/usr/local/srs/conf/docker.conf`, otherwise your tuning silently never
+  applies and SRS runs image defaults (10s fragments, no callbacks).
+- **LL-HLS was removed in SRS 5.** `hls_ll_enabled` / `hls_ll_fragment`
+  fail config validation ("illegal vhost.hls.hls_ll_enabled"). Use short
+  full segments (`hls_fragment 2`) instead.
+- **`http_hooks` `client_id` is a string connection id** (`"5u9c4d30"`),
+  not the numeric HTTP-API client id. Store it as TEXT.
+- **`hls_ctx` is on by default** and wraps every playlist (including
+  static VOD playlists) in a master playlist whose child URI is
+  root-absolute (`/vods/...?...hls_ctx=...`). Behind a reverse proxy that
+  strips a path prefix (`/hls/*` → SRS), players resolve that URI against
+  the proxy origin and lose the prefix → 404. Set `hls_ctx off` unless you
+  need per-session HLS auth.
+- **SRS does not send duration in `on_unpublish`** — compute duration from
+  `started_at` when the callback provides none.
+
+### River (PostgreSQL Job Queue)
+
+River has sharp validation edges that produce confusing failures:
+
+- **Insert-only clients must register the job kind.** `Insert` fails with
+  "job kind is not registered in the client's Workers bundle" unless a
+  worker for the kind exists — even if this client never runs workers.
+  Register a noop worker:
+  ```go
+  workers := river.NewWorkers()
+  river.AddWorker[domain.Args](workers, &noopWorker{})
+  ```
+- **`Queues` set requires `Workers` set and `MaxWorkers >= 1`** — both
+  must be non-empty or `NewClient` errors.
+- **`client.Start()` is non-blocking** — block on a signal/ctx afterwards,
+  or the process exits immediately.
+- **Run `rivermigrate.Migrate()` before `NewClient`**, and make it
+  idempotent: if migration errors but `river_queue` already exists
+  (partial apply from a crash), verify the schema state and continue.
+
+### ffmpeg Subprocesses (Recording / Transcoding)
+
+- **Never discard subprocess stderr** (`cmd.Stderr = nil` hides all
+  failure evidence). Capture it into a buffer and log the tail on
+  failure.
+- **Record to MPEG-TS, not MP4, when the process may be killed abruptly.**
+  SIGKILL loses MP4's moov atom, which takes the AAC track's extradata
+  with it; a later `-c:a copy` remux then fails with "AAC bitstream not in
+  ADTS format and extradata missing" and writes garbage audio. TS is a
+  streaming container — no moov/index, ADTS passes through, safe to kill.
+- **Remuxing TS→MP4 needs `-bsf:a aac_adtstoasc`** (ADTS→ASC framing);
+  MP4→TS copy requires intact extradata.
+- **Verify output with a decode pass, not just exit status.**
+  `ffmpeg -v error -i out.ts -f null -` must emit zero errors. HTTP 200 +
+  file existence proves nothing about media validity.
 
 ### Nil Guards for Injected Dependencies
 

@@ -2,6 +2,8 @@
 
 Feature: VOD processing pipeline debugging (PR #23 branch `feat/browse-vod-discovery`).
 
+**Retro:** [2026-08-12-vod-pipeline-debugging-retro.md](./2026-08-12-vod-pipeline-debugging-retro.md)
+
 ## Corrections & Root Causes
 
 | # | Symptom | Root Cause | Fix |
