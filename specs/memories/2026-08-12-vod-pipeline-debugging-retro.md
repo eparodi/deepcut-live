@@ -85,3 +85,24 @@ workflow (red commits followed by green commits; full suites pass: backend
 **Specs updated:** `specs/browse-vod-discovery.md` gained an Implementation
 Notes section documenting the thumbnailUrl decision, the failed-VOD hiding,
 and the recordingError/hlsUrl changes.
+
+## Round 3 — CI Merge Gate (correction #15)
+
+**Symptom:** the CI integration job flaked on a docs-only commit — FK
+violations in `TruncateAll`, `on_publish` 500s, missing rows,
+`recording_status = ""` — while the same code passed locally and on the
+previous CI run.
+
+**Root cause:** every integration-test package shares ONE Postgres service
+DB in CI, and `go test` runs packages in parallel by default. One package's
+`TruncateAll` deletes rows another package is actively using. Locally each
+package gets its own testcontainers container, which is why the race only
+surfaces in CI.
+
+**Fix:** `go test -p 1 -count=1 ./...` in the integration job
+(`.github/workflows/backend-ci.yml`) — serializes packages against the
+shared DB.
+
+**Rule added to AGENTS.md §5.2 (both repos):** *Integration tests sharing
+one database must not run packages in parallel — run the suite with
+`-p 1`, or give each package its own schema/database.*

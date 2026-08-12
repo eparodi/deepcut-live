@@ -59,7 +59,13 @@ Feature: VOD processing pipeline debugging (PR #23 branch `feat/browse-vod-disco
 - Red test commits intentionally fail CI — always push them together with (or after) the green commit so the branch HEAD stays green.
 - Spec conditions like "remove field X until backend implements it" go stale when a parallel feature implements it — when the condition flips, keep the contract and log an Implementation Note instead of blindly following the stale instruction.
 
-## Round 3 — Reference-repo audit → code quality refactor → generic skills
+## Round 3 — CI merge gate
+
+| # | Symptom | Root cause | Fix |
+|---|---------|-----------|-----|
+| 15 | CI integration job flaked (FK violations on truncate, on_publish 500, "no rows", `recording_status = ""`) — passed locally, failed on a docs-only commit | All integration-test packages share ONE Postgres service DB in CI; `go test` runs packages in parallel, so one package's `TruncateAll` wipes another's rows mid-test. Local dev uses per-package testcontainers, hiding the race | `go test -p 1 -count=1 ./...` in `.github/workflows/backend-ci.yml` (integration job) — serializes packages |
+
+## Round 4 — Reference-repo audit → code quality refactor → generic skills
 
 Separate session on branch `refactor/code-quality-and-generic-skills`.
 Full correction/rule trace table lives in the retro:
