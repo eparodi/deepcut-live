@@ -107,6 +107,7 @@ export interface VodItem {
   totalViewers: number;
   recordingPath: string | null;
   recordingStatus: "ready" | "processing" | "failed" | "pending";
+  thumbnailUrl: string | null;
   createdAt: string;
 }
 

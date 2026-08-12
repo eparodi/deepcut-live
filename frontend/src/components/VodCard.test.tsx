@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { VodCard } from "./VodCard";
 import type { VodItem } from "@/types";
 
@@ -16,6 +16,7 @@ const baseVod: VodItem = {
   totalViewers: 100,
   recordingPath: null,
   recordingStatus: "ready",
+  thumbnailUrl: null,
   createdAt: new Date().toISOString(),
 };
 
@@ -92,5 +93,31 @@ describe("VodCard", () => {
     const img = screen.getByAltText("TestStreamer");
     expect(img).toBeInTheDocument();
     expect(img).toHaveAttribute("src", "https://example.com/avatar.jpg");
+  });
+
+  // ------------------------------------------------------------------------
+  // Thumbnail behavior (test-first — written before the implementation)
+  // ------------------------------------------------------------------------
+
+  it("renders thumbnail image when thumbnailUrl is provided", () => {
+    const vod = { ...baseVod, thumbnailUrl: "/hls/thumbnails/vod-123.jpg" };
+    render(<VodCard vod={vod} />);
+    const img = screen.getByAltText("Amazing Stream thumbnail");
+    expect(img).toBeInTheDocument();
+    expect(img).toHaveAttribute("src", "/hls/thumbnails/vod-123.jpg");
+  });
+
+  it("shows placeholder when thumbnailUrl is null", () => {
+    render(<VodCard vod={baseVod} />);
+    expect(screen.getByRole("img", { name: "No thumbnail" })).toBeInTheDocument();
+  });
+
+  it("falls back to placeholder image when thumbnail fails to load", () => {
+    const vod = { ...baseVod, thumbnailUrl: "/hls/thumbnails/vod-123.jpg" };
+    render(<VodCard vod={vod} />);
+    const img = screen.getByAltText("Amazing Stream thumbnail");
+    fireEvent.error(img);
+    // onError swaps to an inline SVG fallback and clears the handler
+    expect(img).toHaveAttribute("src", expect.stringContaining("data:image/svg+xml"));
   });
 });
