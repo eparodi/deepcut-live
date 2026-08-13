@@ -1,2 +1,6 @@
 data/
 .env
+
+# Orchestrator working docs (temporary; specs/ is the committed source of truth)
+PLAN.md
+LOOP_LOG.md

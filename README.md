@@ -57,6 +57,23 @@ After each feature, write a retro in `specs/memories/` tracing any
 agent mistakes to the specific missing or weak rule, then tighten it.
 The rules get better with every feature.
 
+### 6. Single-Thread Orchestrator Mode (no gates, no waiting)
+
+When the feature is already specced and approved — or the task is a
+well-scoped bugfix/refactor — you can skip the multi-thread dance and
+run everything in ONE thread:
+
+```
+@orchestrator I need to [describe the goal in 1-3 sentences].
+Go until PLAN.md is fully checked off.
+```
+
+The orchestrator simulates PLANNER/CODER/REVIEWER/DEBUGGER internally,
+runs the project's build/test/lint commands after every subtask, and
+keeps working autonomously — no "Should I...?" checkpoints. It tracks
+progress in `PLAN.md` and `LOOP_LOG.md` (gitignored working docs) and
+stops only when every subtask is `[X]` or it is genuinely blocked.
+
 ## Per-Feature Walkthrough
 
 Here's exactly what to paste in each Zed agent thread, per phase.
@@ -185,6 +202,15 @@ conventions, and — critically — a **complete hallucination reference**
 listing every fake API DeepSeek commonly fabricates for that stack,
 with the correct alternative.
 
+### Single-Thread Orchestrator (`orchestrator` skill)
+
+An alternative to running six threads: one thread simulates a 4-role
+team (PLANNER → CODER → REVIEWER → DEBUGGER) internally and loops until
+a `PLAN.md` checklist is fully checked off, logging every iteration to
+`LOOP_LOG.md`. Use it for post-approval implementation sprints,
+well-scoped bugfixes, and refactors where the human review gates have
+already happened and you just want one agent to build and self-verify.
+
 ### Configuration
 
 | File | Purpose |
@@ -221,7 +247,8 @@ your-monorepo/
 │       ├── mobile-engineer/SKILL.md  # Expo/RN implementation
 │       ├── go-chi/SKILL.md           # Go/chi stack standards
 │       ├── nextjs/SKILL.md           # Next.js stack standards
-│       └── expo/SKILL.md             # Expo/RN stack standards
+│       ├── expo/SKILL.md             # Expo/RN stack standards
+│       └── orchestrator/SKILL.md     # Single-thread PLANNER/CODER/REVIEWER/DEBUGGER loop
 ├── backend/                          # Go code
 ├── frontend/                         # Next.js code
 └── mobile/                           # Expo/RN code
