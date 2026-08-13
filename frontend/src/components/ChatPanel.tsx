@@ -340,7 +340,7 @@ export function ChatPanel({
                 <div className="flex items-center gap-2 mb-0.5">
                   <span
                     className="text-xs font-semibold truncate"
-                    style={{ color: "var(--color-primary)" }}
+                    style={{ color: "var(--color-primary-text)" }}
                   >
                     {msg.userName}
                   </span>

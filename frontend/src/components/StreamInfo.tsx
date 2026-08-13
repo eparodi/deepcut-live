@@ -66,7 +66,7 @@ export function StreamInfo({ channel }: StreamInfoProps) {
           className="inline-block rounded-full px-3 py-1 text-xs font-medium"
           style={{
             backgroundColor: "var(--color-surface-raised)",
-            color: "var(--color-primary)",
+            color: "var(--color-primary-text)",
           }}
         >
           {streamCategory}

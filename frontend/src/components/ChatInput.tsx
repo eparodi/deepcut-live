@@ -145,7 +145,7 @@ export function ChatInput({
             disabled={isDisabled}
             maxLength={MAX_CHARS}
             aria-label="Type a chat message"
-            className="w-full rounded-lg px-3 py-2 text-sm outline-none transition-colors disabled:opacity-50"
+            className="w-full rounded-lg px-3 py-2 text-sm outline-none transition-colors disabled:opacity-50 focus:ring-2 focus:ring-[var(--color-primary)]"
             style={{
               backgroundColor: "var(--color-surface)",
               color: "var(--color-text)",
@@ -159,7 +159,7 @@ export function ChatInput({
               style={{
                 color:
                   charCount >= MAX_CHARS
-                    ? "var(--color-danger)"
+                    ? "var(--color-danger-text)"
                     : "var(--color-text-muted)",
               }}
             >

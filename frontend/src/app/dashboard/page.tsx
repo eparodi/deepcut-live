@@ -182,7 +182,7 @@ function DashboardContent() {
           <p className="text-[var(--color-text-muted)] text-lg">
             Could not load dashboard
           </p>
-          <p className="mt-2 text-sm" style={{ color: "var(--color-danger)" }}>
+          <p className="mt-2 text-sm" style={{ color: "var(--color-danger-text)" }}>
             {loadError}
           </p>
           <button
@@ -316,7 +316,7 @@ class DataErrorBoundary extends Component<EBProps, EBState> {
             </p>
             <p
               className="mt-2 text-sm"
-              style={{ color: "var(--color-danger)" }}
+              style={{ color: "var(--color-danger-text)" }}
             >
               {this.state.error.message}
             </p>

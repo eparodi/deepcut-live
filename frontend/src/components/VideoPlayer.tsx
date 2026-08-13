@@ -438,7 +438,7 @@ export function VideoPlayer({ hlsUrl, isLive, vodId, viewerCount = 0, onTheaterC
             />
             <p
               className="text-sm font-medium"
-              style={{ color: "var(--color-primary)" }}
+              style={{ color: "var(--color-primary-text)" }}
             >
               Stream Interrupted
             </p>
@@ -537,8 +537,9 @@ export function VideoPlayer({ hlsUrl, isLive, vodId, viewerCount = 0, onTheaterC
 
           {/* Bottom control bar */}
           <div
-            className={`absolute bottom-0 left-0 right-0 z-20 transition-opacity duration-300 ${
-              controlsVisible ? "opacity-100" : "opacity-0 pointer-events-none"
+            data-testid="controls-bar"
+            className={`absolute bottom-0 left-0 right-0 z-20 transition-[opacity,visibility] duration-300 ${
+              controlsVisible ? "opacity-100 visible" : "opacity-0 invisible pointer-events-none"
             }`}
             style={{
               background: "linear-gradient(to top, rgba(0,0,0,0.8), transparent)",

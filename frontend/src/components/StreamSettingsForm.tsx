@@ -99,7 +99,7 @@ export function StreamSettingsForm({
             }}
           />
           {error && (
-            <p className="mt-1 text-sm" style={{ color: "var(--color-danger)" }} role="alert">
+            <p className="mt-1 text-sm" style={{ color: "var(--color-danger-text)" }} role="alert">
               {error}
             </p>
           )}

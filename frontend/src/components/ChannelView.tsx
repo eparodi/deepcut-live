@@ -80,7 +80,7 @@ export function ChannelView({ id, initialChannel, isSignedIn }: Props) {
               <Link
                 href={`/search?userId=${channel.userId}`}
                 className="text-sm font-medium hover:underline"
-                style={{ color: "var(--color-primary)" }}
+                style={{ color: "var(--color-primary-text)" }}
               >
                 📼 View past streams →
               </Link>

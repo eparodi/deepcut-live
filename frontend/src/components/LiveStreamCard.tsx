@@ -124,7 +124,7 @@ export function LiveStreamCard({
             className="inline-block rounded-full px-2.5 py-0.5 text-xs font-medium"
             style={{
               backgroundColor: "var(--color-surface)",
-              color: "var(--color-primary)",
+              color: "var(--color-primary-text)",
             }}
           >
             {category}
