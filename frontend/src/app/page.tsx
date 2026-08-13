@@ -75,7 +75,7 @@ export default async function HomePage() {
                 📼 Recent Past Streams
               </h2>
               <div
-                className="grid grid-cols-2 lg:grid-cols-4 gap-4"
+                className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
                 role="list"
               >
                 {recentVods.map((vod) => (

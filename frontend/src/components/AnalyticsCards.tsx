@@ -99,7 +99,7 @@ export function AnalyticsCards({
           </p>
           <button
             onClick={onRetry}
-            className="mt-3 text-sm font-medium hover:underline"
+            className="mt-1 py-2 -my-2 text-sm font-medium hover:underline"
             style={{ color: "var(--color-primary-text)" }}
           >
             Retry

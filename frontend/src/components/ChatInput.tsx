@@ -16,8 +16,10 @@ interface ChatInputProps {
   rateLimitSeconds?: number;
   /** Sign-in URL for Google OAuth */
   signInUrl: string;
-  /** Called when user sends a message */
-  onSend: (message: string) => void;
+  /** Called when user sends a message. Returns true if the message left
+      the local UI (delivered/optimistic); false keeps the text so the
+      user can retry. */
+  onSend: (message: string) => boolean;
 }
 
 export function ChatInput({
@@ -46,8 +48,10 @@ export function ChatInput({
     if (isStreamEnded) return;
     if (isRateLimited) return;
 
-    onSend(trimmed);
-    setMessage("");
+    // Keep the text when the send fails so the user can retry.
+    if (onSend(trimmed)) {
+      setMessage("");
+    }
   }, [
     message,
     isSignedIn,

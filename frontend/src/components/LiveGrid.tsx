@@ -95,7 +95,7 @@ function LiveGridContent({ streams, total }: LiveGridProps) {
   // Grid columns: 4 on desktop (lg), 2 on mobile
   const gridClass =
     viewMode === "grid"
-      ? "grid grid-cols-2 lg:grid-cols-4 gap-4"
+      ? "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
       : "flex flex-col gap-3";
 
   return (

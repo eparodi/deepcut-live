@@ -64,7 +64,7 @@ export function VodView({ vod, hlsUrl }: VodViewProps) {
         <div className="mb-4">
           <Link
             href="/search"
-            className="text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
+            className="inline-block py-2 -my-2 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
           >
             ← Back to search
           </Link>

@@ -3,11 +3,18 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ChatInput } from "./ChatInput";
-import { API_BASE_URL } from "@/lib/api";
+import { API_BASE_URL, getMe } from "@/lib/api";
 import { AVATAR_FALLBACK } from "@/lib/fallbacks";
-import type { ChatMessage } from "@/types";
+import type { ChatMessage, User } from "@/types";
 
 type ConnectionState = "connecting" | "connected" | "reconnecting" | "disconnected";
+
+type PendingState = "sending" | "failed";
+
+/** A locally-echoed message awaiting (or failing) server delivery. */
+interface PendingMessage extends ChatMessage {
+  pending: PendingState;
+}
 
 interface ChatPanelProps {
   /** The stream ID to connect to (used in /ws/chat/:streamId) */
@@ -62,6 +69,10 @@ export function ChatPanel({
   );
   const [isRateLimited, setIsRateLimited] = useState(false);
   const [rateLimitSeconds, setRateLimitSeconds] = useState(0);
+  // Current user identity for optimistic echoes (fetched once when
+  // signed in; the input is gated by isSignedIn so a null here is rare).
+  const [me, setMe] = useState<User | null>(null);
+  const [pending, setPending] = useState<PendingMessage[]>([]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -75,6 +86,23 @@ export function ChatPanel({
   const disposedRef = useRef(false);
 
   const signInUrl = `${API_BASE_URL}/api/auth/google`;
+
+  // Fetch the current user for optimistic message echoes.
+  useEffect(() => {
+    if (!isSignedIn) return;
+    let cancelled = false;
+    getMe()
+      .then((user) => {
+        if (!cancelled) setMe(user);
+      })
+      .catch(() => {
+        // No identity available; sends will fail fast in handleSend and
+        // keep the text in the input instead of vanishing.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isSignedIn]);
 
   // Auto-scroll to bottom when messages change
   const scrollToBottom = useCallback(() => {
@@ -120,6 +148,16 @@ export function ChatPanel({
               if (prev.some((m) => m.id === msg.id)) return prev;
               return [...prev, msg];
             });
+            // The server echoed one of our pending messages — clear it.
+            setPending((prev) =>
+              prev.filter(
+                (p) =>
+                  !(
+                    p.userId === (data.payload as ChatMessage).userId &&
+                    p.message === (data.payload as ChatMessage).message
+                  )
+              )
+            );
             break;
           case "error":
             if (data.payload?.code === "rate_limited") {
@@ -156,6 +194,14 @@ export function ChatPanel({
     ws.onclose = (event) => {
       // Unmounted — never reconnect or touch state.
       if (disposedRef.current) return;
+
+      // Any message still in flight never made it (or we can't know) —
+      // surface it as failed with a retry affordance.
+      setPending((prev) =>
+        prev.map((p) =>
+          p.pending === "sending" ? { ...p, pending: "failed" as PendingState } : p
+        )
+      );
 
       // Stream offline close code
       if (event.code === 4001) {
@@ -217,28 +263,60 @@ export function ChatPanel({
     };
   }, [connect, isVodReplay]);
 
-  // Send message handler
+  // Send message handler: returns whether the message left the local UI
+  // (true = optimistic echo appended; false = input keeps the text).
+  const sendToSocket = useCallback((message: string): boolean => {
+    if (wsRef.current?.readyState !== WebSocket.OPEN) return false;
+    wsRef.current.send(
+      JSON.stringify({
+        type: "message",
+        payload: { message },
+      })
+    );
+    return true;
+  }, []);
+
   const handleSend = useCallback(
-    (message: string) => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(
-          JSON.stringify({
-            type: "message",
-            payload: { message },
-          })
-        );
-      }
+    (message: string): boolean => {
+      if (!me) return false; // no identity to echo — keep text in input
+      const optimistic: PendingMessage = {
+        id: `pending-${Math.random().toString(36).slice(2)}`,
+        userId: me.id,
+        userName: me.name,
+        userAvatarUrl: me.avatarUrl,
+        message,
+        sentAt: new Date().toISOString(),
+        pending: sendToSocket(message) ? "sending" : "failed",
+      };
+      setPending((prev) => [...prev, optimistic]);
+      return optimistic.pending === "sending";
     },
-    []
+    [me, sendToSocket]
+  );
+
+  // Re-send a failed message.
+  const retrySend = useCallback(
+    (pendingMsg: PendingMessage) => {
+      setPending((prev) => prev.filter((p) => p.id !== pendingMsg.id));
+      handleSend(pendingMsg.message);
+    },
+    [handleSend]
   );
 
   // Group consecutive messages from the same user
   const shouldShowHeader = (index: number): boolean => {
     if (index === 0) return true;
-    const prev = messages[index - 1];
-    const curr = messages[index];
+    const prev = combinedMessages[index - 1];
+    const curr = combinedMessages[index];
     return prev.userId !== curr.userId;
   };
+
+  // Server messages first, then local echoes (newest last). The React
+  // Compiler handles memoization here.
+  const combinedMessages: (ChatMessage | PendingMessage)[] = [
+    ...messages,
+    ...pending,
+  ];
 
   return (
     <div
@@ -312,7 +390,10 @@ export function ChatPanel({
         )}
 
         {/* Messages */}
-        {messages.map((msg, index) => (
+        {combinedMessages.map((msg, index) => {
+          const isPending = "pending" in msg;
+          const pendingState = isPending ? msg.pending : null;
+          return (
           <div key={msg.id} className="flex items-start gap-2">
             {/* Avatar — only show for first in group */}
             <div className="w-6 h-6 shrink-0">
@@ -321,7 +402,7 @@ export function ChatPanel({
                 <img
                   src={msg.userAvatarUrl}
                   alt={msg.userName}
-                  className="w-6 h-6 rounded-full"
+                  className={`w-6 h-6 rounded-full ${pendingState === "sending" ? "opacity-60" : ""}`}
                   referrerPolicy="no-referrer"
                   onError={(e) => {
                     const target = e.target as HTMLImageElement;
@@ -347,19 +428,51 @@ export function ChatPanel({
                   <span className="text-xs text-[var(--color-text-muted)] shrink-0">
                     {formatTime(msg.sentAt)}
                   </span>
+                  {pendingState === "sending" && (
+                    <span
+                      className="text-xs italic shrink-0"
+                      style={{ color: "var(--color-text-muted)" }}
+                    >
+                      sending…
+                    </span>
+                  )}
+                  {pendingState === "failed" && (
+                    <span
+                      className="text-xs font-medium shrink-0"
+                      style={{ color: "var(--color-danger-text)" }}
+                    >
+                      not delivered
+                    </span>
+                  )}
                 </div>
               )}
 
               {/* Message text */}
               <p
                 className="text-sm text-[var(--color-text)] break-words"
-                style={{ fontSize: "var(--text-sm)" }}
+                style={{
+                  fontSize: "var(--text-sm)",
+                  opacity: pendingState === "sending" ? 0.7 : undefined,
+                }}
               >
                 {msg.message}
               </p>
+
+              {/* Failed delivery retry */}
+              {pendingState === "failed" && (
+                <button
+                  type="button"
+                  onClick={() => retrySend(msg as PendingMessage)}
+                  className="mt-0.5 text-xs font-medium hover:underline"
+                  style={{ color: "var(--color-primary-text)" }}
+                >
+                  Retry
+                </button>
+              )}
             </div>
           </div>
-        ))}
+          );
+        })}
 
         {/* Auto-scroll anchor */}
         <div ref={messagesEndRef} />

@@ -139,6 +139,46 @@ describe("ChatInput", () => {
     expect(onSend).not.toHaveBeenCalled();
   });
 
+  it("clears the input when onSend reports success", async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn().mockReturnValue(true);
+    render(
+      <ChatInput
+        isSignedIn
+        isReconnecting={false}
+        isStreamEnded={false}
+        isRateLimited={false}
+        signInUrl={signInUrl}
+        onSend={onSend}
+      />
+    );
+    const input = screen.getByPlaceholderText("Type a message...");
+    await user.type(input, "Hello!");
+    await user.click(screen.getByText("Send"));
+    expect(onSend).toHaveBeenCalledWith("Hello!");
+    expect(input).toHaveValue("");
+  });
+
+  it("keeps the text when onSend reports failure", async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn().mockReturnValue(false);
+    render(
+      <ChatInput
+        isSignedIn
+        isReconnecting={false}
+        isStreamEnded={false}
+        isRateLimited={false}
+        signInUrl={signInUrl}
+        onSend={onSend}
+      />
+    );
+    const input = screen.getByPlaceholderText("Type a message...");
+    await user.type(input, "Hello!");
+    await user.click(screen.getByText("Send"));
+    expect(onSend).toHaveBeenCalledWith("Hello!");
+    expect(input).toHaveValue("Hello!");
+  });
+
   it("disables input when reconnecting", () => {
     render(
       <ChatInput

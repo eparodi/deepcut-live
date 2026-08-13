@@ -38,7 +38,7 @@ export function ChannelView({ id, initialChannel, isSignedIn }: Props) {
         <div className="mb-4">
           <Link
             href="/"
-            className="text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
+            className="inline-block py-2 -my-2 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
           >
             ← Browse streams
           </Link>
