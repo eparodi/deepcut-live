@@ -3,10 +3,9 @@
 
 import Link from "next/link";
 import { useState, useEffect, useCallback } from "react";
-import { getMe } from "@/lib/api";
+import { API_BASE_URL, getMe } from "@/lib/api";
+import { AVATAR_FALLBACK } from "@/lib/fallbacks";
 import type { User } from "@/types";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
 interface NavbarProps {
   /** Whether the user has a token cookie (read server-side) */
@@ -77,6 +76,11 @@ export function Navbar({ initialSignedIn }: NavbarProps) {
                 alt={user.name}
                 className="w-8 h-8 rounded-full"
                 referrerPolicy="no-referrer"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.onerror = null;
+                  target.src = AVATAR_FALLBACK;
+                }}
               />
             </div>
           ) : (

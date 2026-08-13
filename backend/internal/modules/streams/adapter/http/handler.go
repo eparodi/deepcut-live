@@ -360,10 +360,3 @@ func (h *StreamHandler) StreamWebSocket(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 }
-
-func safePrefix(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n]
-}

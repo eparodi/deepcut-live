@@ -63,9 +63,9 @@ This is not optional — the frontend already has TypeScript types defined.
 Your handler response MUST match them field-for-field.
 
 **Stub implementations are NOT stable.** If your handler has an
-interface dependency (e.g., `streamOps`) that returns panics or
-hardcoded data, the endpoint is NOT stable. Finish wiring the real
-service before publishing the contract.
+interface dependency that returns panics or hardcoded data, the
+endpoint is NOT stable. Finish wiring the real service before
+publishing the contract.
 
 ### When the Spec is Wrong
 
@@ -87,9 +87,9 @@ will be a full table scan. Should we add an index?"
 
 Common anti-patterns to flag:
 - Handler returns a bare array when the frontend type expects a wrapped
-  object (`{streams, total}` vs `[]`)
+  object (`{items, total}` vs `[]`)
 - Handler returns `{"status":"ok"}` when the frontend expects echoed
-  fields (`{streamTitle, streamCategory}`)
+  fields (e.g. `{title, category}`)
 - Wrong HTTP status code: 404 for "resource exists but in wrong state"
   → use 409 Conflict instead
 - Missing input validation: enums, required fields, length limits not

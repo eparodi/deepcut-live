@@ -20,4 +20,10 @@ type ChatClient struct {
 	UserAvatarUrl string
 	Send          chan []byte
 	LastActive    time.Time
+
+	// Close terminates the client's connection. Set by the transport layer
+	// (WebSocket handler) at connect time; called to disconnect the client
+	// remotely, e.g. when the hub expires it for idleness. Must be safe to
+	// call multiple times.
+	Close func()
 }

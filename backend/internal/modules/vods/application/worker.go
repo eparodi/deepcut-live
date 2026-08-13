@@ -1,16 +1,16 @@
 package application
 
 import (
-	"context"
 	"bytes"
+	"context"
 	"encoding/json"
-	"net/http"
-	"time"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
@@ -64,18 +64,20 @@ func (w *VODWorker) Work(ctx context.Context, job *river.Job[voddomain.VODProces
 		return fmt.Errorf("mark ready: %w", err)
 	}
 
-	w.notifyServer(args.StreamID, "ready", "/hls/vods/"+args.StreamID+"/index.m3u8", "/hls/thumbnails/"+args.StreamID+".jpg", "")
+	w.notifyServer(args.StreamID, string(voddomain.RecordingStatusReady), "/hls/vods/"+args.StreamID+"/index.m3u8", "/hls/thumbnails/"+args.StreamID+".jpg", "")
 	w.logger.Info("vod processing complete", "stream_id", args.StreamID)
 	return nil
 }
 
 func (w *VODWorker) transcode(ctx context.Context, inputPath, outputPath, preset string) error {
-	args := []string{"-i", inputPath, "-c:v", "copy", "-c:a", "copy"}
-
-	if preset == "720p" {
+	var args []string
+	switch preset {
+	case "720p":
 		args = []string{"-i", inputPath, "-vf", "scale=-2:720", "-c:v", "libx264", "-b:v", "2M", "-c:a", "aac", "-b:a", "128k"}
-	} else if preset == "480p" {
+	case "480p":
 		args = []string{"-i", inputPath, "-vf", "scale=-2:480", "-c:v", "libx264", "-b:v", "1M", "-c:a", "aac", "-b:a", "96k"}
+	default: // "copy"
+		args = []string{"-i", inputPath, "-c:v", "copy", "-c:a", "copy"}
 	}
 
 	args = append(args,
@@ -156,12 +158,16 @@ func (w *VODWorker) notifyServer(vodID, status, hlsURL, thumbnailURL, errMsg str
 		"thumbnailUrl": thumbnailURL,
 		"error":        errMsg,
 	}
-	body, _ := json.Marshal(payload)
+	body, err := json.Marshal(payload)
+	if err != nil {
+		w.logger.Warn("vod status notify: marshal payload failed", "err", err)
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "POST", backendURL+"/api/internal/vod-status", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, backendURL+"/api/internal/vod-status", bytes.NewReader(body))
 	if err != nil {
 		w.logger.Warn("vod status notify: build request failed", "err", err)
 		return

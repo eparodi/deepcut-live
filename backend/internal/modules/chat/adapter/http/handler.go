@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -40,6 +41,11 @@ const (
 	defaultMessageLimit = 100
 	maxMessageLimit     = 200
 )
+
+// wsStatusStreamOffline is the application-defined close code sent when a
+// client connects to a stream that is not live (4000-4999 range is reserved
+// for applications by RFC 6455).
+const wsStatusStreamOffline = websocket.StatusCode(4001)
 
 type ChatHandler struct {
 	svc    chatService
@@ -103,7 +109,7 @@ func (h *ChatHandler) ChatWebSocket(w http.ResponseWriter, r *http.Request) {
 	defer subCancel()
 	isLive, err := h.svc.IsStreamLive(subCtx, streamID)
 	if err != nil || !isLive {
-		conn.Close(websocket.StatusCode(4001), "stream offline")
+		conn.Close(wsStatusStreamOffline, "stream offline")
 		return
 	}
 
@@ -119,12 +125,19 @@ func (h *ChatHandler) ChatWebSocket(w http.ResponseWriter, r *http.Request) {
 		// Invalid/expired token is not an error — proceed as anonymous.
 	}
 
+	// connCtx governs both pumps. It is cancelled when the handler returns,
+	// when readPump exits (client disconnected), or remotely via client.Close
+	// (idle expiry) — any of these unblocks writePump so all cleanup runs.
+	connCtx, connCancel := context.WithCancel(context.Background())
+	defer connCancel()
+
 	client := &domain.ChatClient{
 		UserID:        userID,
 		UserName:      userName,
 		UserAvatarUrl: userAvatarUrl,
 		Send:          make(chan []byte, 64),
 		LastActive:    time.Now(),
+		Close:         connCancel,
 	}
 
 	h.hub.Join(streamID, client)
@@ -133,12 +146,8 @@ func (h *ChatHandler) ChatWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Send initial batch of recent messages.
 	h.sendInitialBatch(subCtx, conn, streamID)
 
-	// Background goroutines for read/write with idle tracking.
-	connCtx, connCancel := context.WithCancel(context.Background())
-	defer connCancel()
-
-	go h.readPump(connCtx, conn, streamID, client)
-	go h.idleMonitor(connCtx, conn, streamID, client)
+	go h.readPump(connCtx, connCancel, conn, streamID, client)
+	go h.idleMonitor(connCtx, streamID)
 
 	h.writePump(connCtx, conn, client)
 }
@@ -169,9 +178,9 @@ func (h *ChatHandler) sendInitialBatch(ctx context.Context, conn *websocket.Conn
 
 	for i := len(msgs) - 1; i >= 0; i-- {
 		m := msgs[i]
-		envelope := map[string]interface{}{
+		envelope := map[string]any{
 			"type": "message",
-			"payload": map[string]interface{}{
+			"payload": map[string]any{
 				"id":            m.ID,
 				"userId":        m.UserID,
 				"userName":      m.UserName,
@@ -186,8 +195,10 @@ func (h *ChatHandler) sendInitialBatch(ctx context.Context, conn *websocket.Conn
 	}
 }
 
-// readPump reads frames from the WebSocket connection.
-func (h *ChatHandler) readPump(ctx context.Context, conn *websocket.Conn, streamID string, client *domain.ChatClient) {
+// readPump reads frames from the WebSocket connection. On exit it cancels
+// the connection context so writePump (and the handler) unblock and clean up.
+func (h *ChatHandler) readPump(ctx context.Context, cancel context.CancelFunc, conn *websocket.Conn, streamID string, client *domain.ChatClient) {
+	defer cancel()
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
 	for {
@@ -239,21 +250,7 @@ func (h *ChatHandler) handleChatMessage(ctx context.Context, streamID string, cl
 	}
 
 	// Validate message is not empty or whitespace-only.
-	if len(p.Message) == 0 {
-		h.sendToClient(client, "error", map[string]string{
-			"code":    "invalid_message",
-			"message": "Message cannot be empty",
-		})
-		return
-	}
-	trimmed := ""
-	for _, r := range p.Message {
-		if r != ' ' && r != '\t' && r != '\n' && r != '\r' {
-			trimmed = p.Message
-			break
-		}
-	}
-	if trimmed == "" {
+	if strings.TrimSpace(p.Message) == "" {
 		h.sendToClient(client, "error", map[string]string{
 			"code":    "invalid_message",
 			"message": "Message cannot be empty",
@@ -280,8 +277,8 @@ func (h *ChatHandler) handleChatMessage(ctx context.Context, streamID string, cl
 
 // sendToClient marshals a message and sends it to the client via the writePump channel.
 // This ensures all writes go through a single goroutine (writePump).
-func (h *ChatHandler) sendToClient(client *domain.ChatClient, msgType string, payload interface{}) {
-	envelope := map[string]interface{}{
+func (h *ChatHandler) sendToClient(client *domain.ChatClient, msgType string, payload any) {
+	envelope := map[string]any{
 		"type": msgType,
 	}
 	if payload != nil {
@@ -316,20 +313,21 @@ func (h *ChatHandler) writePump(ctx context.Context, conn *websocket.Conn, clien
 	}
 }
 
-// idleMonitor periodically checks if the client has been idle and closes the connection if so.
-func (h *ChatHandler) idleMonitor(ctx context.Context, conn *websocket.Conn, streamID string, client *domain.ChatClient) {
+// idleMonitor periodically expires idle clients from the room. ExpireIdle
+// removes every expired client from the hub, so this monitor must close all
+// of them (via their Close callback), not just its own connection — removed
+// clients receive no further broadcasts and would otherwise leak.
+func (h *ChatHandler) idleMonitor(ctx context.Context, streamID string) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
-			expired := h.hub.ExpireIdle(streamID, wsIdleTimeout)
-			for _, c := range expired {
-				if c == client {
-					h.logger.Info("closing idle chat client", "stream_id", streamID, "user_id", client.UserID)
-					conn.Close(websocket.StatusNormalClosure, "idle timeout")
-					return
+			for _, c := range h.hub.ExpireIdle(streamID, wsIdleTimeout) {
+				h.logger.Info("closing idle chat client", "stream_id", streamID, "user_id", c.UserID)
+				if c.Close != nil {
+					c.Close()
 				}
 			}
 		case <-ctx.Done():

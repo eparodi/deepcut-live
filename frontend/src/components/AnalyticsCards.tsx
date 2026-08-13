@@ -3,35 +3,13 @@
 
 import { useEffect, useState } from "react";
 import type { Analytics } from "@/types";
+import { formatDurationCoarse, formatViewerCount } from "@/lib/format";
 
 interface AnalyticsCardsProps {
   analytics: Analytics | null;
   loading: boolean;
   error: string | null;
   onRetry: () => void;
-}
-
-/** Format a number for display: 1205 → "1.2k", 14205 → "14.2k", 1234567 → "1.2M" */
-function formatNumber(n: number): string {
-  if (n >= 1_000_000) {
-    const val = n / 1_000_000;
-    return val % 1 === 0 ? `${val}M` : `${val.toFixed(1)}M`;
-  }
-  if (n >= 1_000) {
-    const val = n / 1_000;
-    return val % 1 === 0 ? `${val}k` : `${val.toFixed(1)}k`;
-  }
-  return n.toLocaleString();
-}
-
-/** Format seconds into human-readable duration */
-function formatDuration(totalSeconds: number): string {
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-  return `${minutes}m`;
 }
 
 interface CardProps {
@@ -156,15 +134,15 @@ export function AnalyticsCards({
   // Populated state
   const cards = [
     {
-      value: formatDuration(analytics.totalStreamTimeSeconds),
+      value: formatDurationCoarse(analytics.totalStreamTimeSeconds),
       label: "stream time",
     },
-    { value: formatNumber(analytics.peakViewers), label: "peak viewers" },
+    { value: formatViewerCount(analytics.peakViewers), label: "peak viewers" },
     {
-      value: formatNumber(analytics.totalUniqueViewers),
+      value: formatViewerCount(analytics.totalUniqueViewers),
       label: "unique viewers",
     },
-    { value: formatNumber(analytics.totalStreams), label: "streams this wk" },
+    { value: formatViewerCount(analytics.totalStreams), label: "streams this wk" },
   ];
 
   return (

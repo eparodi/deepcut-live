@@ -3,6 +3,7 @@
 // useState for states, mouse/keyboard event handlers for custom controls
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import Link from "next/link";
 import Hls from "hls.js";
 
 type PlayerState =
@@ -135,7 +136,9 @@ export function VideoPlayer({ hlsUrl, isLive, vodId, viewerCount = 0, onTheaterC
       video.play().catch(() => {
         // Autoplay may be blocked; that's fine, user can click play
       });
-      setPlayerState(isLive ? "live" : "live");
+      // "live" is the playing state for both live streams and VODs — the
+      // state machine has no separate VOD-playback state.
+      setPlayerState("live");
       return;
     }
 
@@ -242,6 +245,13 @@ export function VideoPlayer({ hlsUrl, isLive, vodId, viewerCount = 0, onTheaterC
     hideTimerRef.current = setTimeout(() => {
       setShowControls(false);
     }, 3000);
+  }, []);
+
+  // Clear the auto-hide timer on unmount so it can't fire afterwards.
+  useEffect(() => {
+    return () => {
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    };
   }, []);
 
   // ---- Fullscreen change listener ----
@@ -448,13 +458,13 @@ export function VideoPlayer({ hlsUrl, isLive, vodId, viewerCount = 0, onTheaterC
               Stream ended
             </p>
             {vodId && (
-              <a
+              <Link
                 href={`/vods/${vodId}`}
                 className="inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:opacity-90"
                 style={{ backgroundColor: "var(--color-primary)" }}
               >
                 Watch VOD
-              </a>
+              </Link>
             )}
           </div>
         </div>

@@ -2,6 +2,25 @@ package domain
 
 import "time"
 
+// StreamStatus enumerates the lifecycle states of a stream.
+type StreamStatus string
+
+const (
+	StreamStatusLive        StreamStatus = "live"
+	StreamStatusOffline     StreamStatus = "offline"
+	StreamStatusInterrupted StreamStatus = "interrupted"
+)
+
+// RecordingStatus enumerates the lifecycle states of a stream recording.
+type RecordingStatus string
+
+const (
+	RecordingStatusPending    RecordingStatus = "pending"
+	RecordingStatusProcessing RecordingStatus = "processing"
+	RecordingStatusReady      RecordingStatus = "ready"
+	RecordingStatusFailed     RecordingStatus = "failed"
+)
+
 // Stream represents a streaming session from the database.
 type Stream struct {
 	ID              string

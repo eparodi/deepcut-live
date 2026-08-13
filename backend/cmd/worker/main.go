@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
@@ -21,7 +22,13 @@ import (
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	if err := run(logger); err != nil {
+		logger.Error("worker exited with error", "err", err)
+		os.Exit(1)
+	}
+}
 
+func run(logger *slog.Logger) error {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
 		databaseURL = "postgres://live:live@localhost:5432/live?sslmode=disable"
@@ -29,14 +36,12 @@ func main() {
 
 	pool, err := pgxpool.New(context.Background(), databaseURL)
 	if err != nil {
-		logger.Error("failed to connect to database", "err", err)
-		os.Exit(1)
+		return fmt.Errorf("connect db: %w", err)
 	}
 	defer pool.Close()
 
 	if err := migrateRiverSchema(pool, logger); err != nil {
-		logger.Error("river migration failed", "err", err)
-		os.Exit(1)
+		return fmt.Errorf("river migration: %w", err)
 	}
 
 	vodWorker := vodapp.NewVODWorker(pool, logger)
@@ -58,14 +63,12 @@ func main() {
 		Workers: workers,
 	})
 	if err != nil {
-		logger.Error("failed to create river client", "err", err)
-		os.Exit(1)
+		return fmt.Errorf("create river client: %w", err)
 	}
 
 	// Start the client in the background (non-blocking).
 	if err := client.Start(context.Background()); err != nil {
-		logger.Error("client start failed", "err", err)
-		os.Exit(1)
+		return fmt.Errorf("start river client: %w", err)
 	}
 
 	logger.Info("VOD worker started, waiting for jobs")
@@ -76,10 +79,13 @@ func main() {
 	<-ctx.Done()
 
 	logger.Info("shutting down worker")
-	if err := client.Stop(context.Background()); err != nil {
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer stopCancel()
+	if err := client.Stop(stopCtx); err != nil {
 		logger.Error("client stop failed", "err", err)
 	}
 	logger.Info("worker shut down gracefully")
+	return nil
 }
 
 func migrateRiverSchema(pool *pgxpool.Pool, logger *slog.Logger) error {

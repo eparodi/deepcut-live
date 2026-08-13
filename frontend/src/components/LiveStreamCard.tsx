@@ -1,29 +1,15 @@
 "use client";
-// Client Component — needs onClick for navigation
+// Client Component — needs img onError fallback handlers
 
 import Link from "next/link";
 import type { LiveStream } from "@/types";
-import { THUMBNAIL_FALLBACK } from "@/lib/fallbacks";
+import { AVATAR_FALLBACK, THUMBNAIL_FALLBACK } from "@/lib/fallbacks";
+import { formatViewerCount } from "@/lib/format";
 
 interface LiveStreamCardProps {
   stream: LiveStream;
-  /** Called when the card begins to fade out (stream ended) */
-  onStreamEnded?: (userId: string) => void;
   /** Whether this is a new stream that should fade in */
   isNew?: boolean;
-}
-
-/** Format a viewer count for display: 1205 → "1.2k" */
-function formatViewerCount(n: number): string {
-  if (n >= 1_000_000) {
-    const val = n / 1_000_000;
-    return val % 1 === 0 ? `${val}M` : `${val.toFixed(1)}M`;
-  }
-  if (n >= 1_000) {
-    const val = n / 1_000;
-    return val % 1 === 0 ? `${val}k` : `${val.toFixed(1)}k`;
-  }
-  return n.toLocaleString();
 }
 
 export function LiveStreamCard({
@@ -113,6 +99,11 @@ export function LiveStreamCard({
             alt={streamerName}
             className="w-6 h-6 rounded-full flex-shrink-0"
             referrerPolicy="no-referrer"
+            onError={(e) => {
+              const target = e.target as HTMLImageElement;
+              target.onerror = null;
+              target.src = AVATAR_FALLBACK;
+            }}
           />
           <span className="text-sm font-medium text-[var(--color-text)] truncate">
             {streamerName}

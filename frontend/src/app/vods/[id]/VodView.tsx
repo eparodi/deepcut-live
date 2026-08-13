@@ -5,38 +5,12 @@ import Link from "next/link";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { ChatPanel } from "@/components/ChatPanel";
 import { AVATAR_FALLBACK } from "@/lib/fallbacks";
+import { formatDuration, formatViewerCount } from "@/lib/format";
 import type { VodDetail } from "@/types";
 
 interface VodViewProps {
   vod: VodDetail;
   hlsUrl: string;
-}
-
-/** Format duration in seconds to human-readable: 3661 → "1h 1m", 45 → "45s" */
-function formatDuration(totalSeconds: number): string {
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-  if (minutes > 0) {
-    return `${minutes}m`;
-  }
-  return `${seconds}s`;
-}
-
-/** Format a viewer count for display: 1205 → "1.2k" */
-function formatViewCount(n: number): string {
-  if (n >= 1_000_000) {
-    const val = n / 1_000_000;
-    return val % 1 === 0 ? `${val}M` : `${val.toFixed(1)}M`;
-  }
-  if (n >= 1_000) {
-    const val = n / 1_000;
-    return val % 1 === 0 ? `${val}k` : `${val.toFixed(1)}k`;
-  }
-  return n.toLocaleString();
 }
 
 /** Format an ISO date to a readable string: "Jan 15, 2026" */
@@ -77,7 +51,7 @@ export function VodView({ vod, hlsUrl }: VodViewProps) {
 
   const durationLabel =
     durationSeconds != null ? formatDuration(durationSeconds) : null;
-  const viewLabel = `${formatViewCount(totalViewers)} views`;
+  const viewLabel = `${formatViewerCount(totalViewers)} views`;
   const dateLabel = formatDate(startedAt);
 
   // Use the VOD's id as the streamId for chat replay

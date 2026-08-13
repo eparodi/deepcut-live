@@ -2,9 +2,11 @@ package river
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -54,7 +56,7 @@ type noopWorker struct {
 }
 
 func (w *noopWorker) Work(ctx context.Context, job *river.Job[domain.VODProcessArgs]) error {
-	return fmt.Errorf("noop worker should never run")
+	return errors.New("noop worker should never run")
 }
 
 // envInt reads an integer environment variable with a default fallback.
@@ -71,7 +73,7 @@ func envInt(key string, def int) int {
 func (q *Queue) Enqueue(ctx context.Context, args domain.VODProcessArgs) error {
 	// Guard against typed-nil receiver (interface holding (*Queue)(nil))
 	if q == nil || q.client == nil {
-		return fmt.Errorf("vod queue not initialized")
+		return errors.New("vod queue not initialized")
 	}
 	_, err := q.client.Insert(ctx, &args, nil)
 	if err != nil {
@@ -82,5 +84,7 @@ func (q *Queue) Enqueue(ctx context.Context, args domain.VODProcessArgs) error {
 
 // Close stops the River client. Call during graceful shutdown.
 func (q *Queue) Close() error {
-	return q.client.Stop(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return q.client.Stop(ctx)
 }

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -123,7 +124,11 @@ func generateTestKeys() (privPEM, pubPEM string) {
 // newTestAuthService creates an AuthService wired to a mock repo for tests.
 func newTestAuthService(repo *mockAuthRepo) *AuthService {
 	privPEM, pubPEM := generateTestKeys()
-	return NewAuthService(repo, "test-client-id", "test-client-secret", "http://localhost:8080", privPEM, pubPEM)
+	svc, err := NewAuthService(repo, "test-client-id", "test-client-secret", "http://localhost:8080", privPEM, pubPEM)
+	if err != nil {
+		panic(fmt.Sprintf("new test auth service: %v", err))
+	}
+	return svc
 }
 
 // ---------------------------------------------------------------------------
@@ -704,7 +709,10 @@ func TestGenerateStreamKey(t *testing.T) {
 
 func newTestAuthServiceWithTokenURL(repo *mockAuthRepo, tokenURL string) *AuthService {
 	privPEM, pubPEM := generateTestKeys()
-	svc := NewAuthService(repo, "test-client-id", "test-client-secret", "http://localhost:8080", privPEM, pubPEM)
+	svc, err := NewAuthService(repo, "test-client-id", "test-client-secret", "http://localhost:8080", privPEM, pubPEM)
+	if err != nil {
+		panic(fmt.Sprintf("new test auth service: %v", err))
+	}
 	svc.googleCfg.Endpoint = oauth2.Endpoint{
 		AuthURL:  svc.googleCfg.Endpoint.AuthURL,
 		TokenURL: tokenURL,

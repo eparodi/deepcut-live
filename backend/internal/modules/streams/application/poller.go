@@ -79,7 +79,7 @@ func (s *StreamService) pollSRS(ctx context.Context, seen map[string]bool) {
 		if title != "" {
 			streamTitle = &title
 		}
-		stream, err := s.repo.CreateStream(ctx, userID, streamTitle, "", hlsPath)
+		stream, err := s.repo.CreateStream(ctx, userID, streamTitle, c.ID, hlsPath)
 		if err != nil {
 			s.errorLog("srs poller: create stream", "err", err, "user_id", userID)
 			continue
@@ -90,9 +90,11 @@ func (s *StreamService) pollSRS(ctx context.Context, seen map[string]bool) {
 			continue
 		}
 
-		s.hub.NotifyStreamStarted(userID, stream.ID)
+		if s.hub != nil {
+			s.hub.NotifyStreamStarted(userID, stream.ID)
+		}
 		s.startLiveThumbnail(stream.ID, c.Name)
-		recordingPaths.Store(stream.ID, s.startRecording(stream.ID, c.Name))
+		s.recordingPaths.Store(stream.ID, s.startRecording(stream.ID, c.Name))
 		seen[c.Name] = true
 		s.infoLog("srs poller: stream started", "stream_id", stream.ID, "user_id", userID)
 	}
@@ -105,21 +107,9 @@ func (s *StreamService) pollSRS(ctx context.Context, seen map[string]bool) {
 			if err == nil {
 				stream, err := s.repo.GetStreamByUserID(ctx, userID)
 				if err == nil {
-					if endErr := s.repo.EndStream(ctx, stream.ID, "", "", 0); endErr != nil {
-						s.errorLog("srs poller: end stream failed", "err", endErr, "stream_id", stream.ID)
+					if err := s.finalizeStream(ctx, stream, "", "", 0); err != nil {
+						s.errorLog("srs poller: end stream failed", "err", err, "stream_id", stream.ID)
 					}
-					if statusErr := s.authRepo.SetLiveStatus(ctx, userID, false); statusErr != nil {
-						s.errorLog("srs poller: set live status failed", "err", statusErr, "user_id", userID)
-					}
-					s.hub.NotifyStreamEnded(userID)
-					s.stopLiveThumbnail(stream.ID)
-					s.stopRecording(stream.ID)
-					recPath := ""
-					if stored, ok := recordingPaths.Load(stream.ID); ok {
-						recPath = stored.(string)
-						recordingPaths.Delete(stream.ID)
-					}
-					s.handleRecording(ctx, stream.ID, recPath)
 					s.infoLog("srs poller: stream ended", "user_id", userID)
 				}
 			}
@@ -154,17 +144,21 @@ func (s *StreamService) errorLog(msg string, args ...any) {
 }
 
 func (s *StreamService) fetchSRSClients(ctx context.Context) ([]srsClient, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET",
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		fmt.Sprintf("%s/api/v1/clients/", s.srsAPIURL), nil)
 	if err != nil {
 		return nil, fmt.Errorf("build srs request: %w", err)
 	}
 
-	resp, err := s.http.Do(req)
+	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("srs api call: %w", err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("srs api responded with %d", resp.StatusCode)
+	}
 
 	var body srsClientsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {

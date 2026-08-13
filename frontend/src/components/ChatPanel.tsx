@@ -3,6 +3,8 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ChatInput } from "./ChatInput";
+import { API_BASE_URL } from "@/lib/api";
+import { AVATAR_FALLBACK } from "@/lib/fallbacks";
 import type { ChatMessage } from "@/types";
 
 type ConnectionState = "connecting" | "connected" | "reconnecting" | "disconnected";
@@ -20,17 +22,17 @@ interface ChatPanelProps {
   initialMessages?: ChatMessage[];
 }
 
-	// API_HOST is the Next.js proxy (for REST calls). WebSocket must go directly
-	// to the backend because Next.js middleware doesn't support WS upgrades.
-	const API_HOST = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081";
-	const WS_HOST = process.env.NEXT_PUBLIC_WS_URL || "http://localhost:8081";
+// Sign-in goes through the Next.js proxy (same-origin), like the Navbar.
+// WebSocket must go directly to the backend because Next.js middleware
+// doesn't support WS upgrades.
+const WS_HOST = process.env.NEXT_PUBLIC_WS_URL || "http://localhost:8081";
 
-	/** Convert HTTP URL to WebSocket URL — always points to the backend directly */
-	function getWsUrl(streamId: string): string {
-	  const url = new URL(WS_HOST);
-	  const protocol = url.protocol === "https:" ? "wss:" : "ws:";
-	  return `${protocol}//${url.host}/ws/chat/${streamId}`;
-	}
+/** Convert HTTP URL to WebSocket URL — always points to the backend directly */
+function getWsUrl(streamId: string): string {
+  const url = new URL(WS_HOST);
+  const protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  return `${protocol}//${url.host}/ws/chat/${streamId}`;
+}
 
 /** Format a timestamp for display */
 function formatTime(iso: string): string {
@@ -68,9 +70,11 @@ export function ChatPanel({
   const pingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const rateLimitTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const connectRef = useRef<() => void>(() => {});
+  // Set on unmount so a late onclose can't schedule a reconnect (which would
+  // leak sockets and ping timers past the component's lifetime).
+  const disposedRef = useRef(false);
 
-  const apiBaseUrl = API_HOST;
-  const signInUrl = `${apiBaseUrl}/api/auth/google`;
+  const signInUrl = `${API_BASE_URL}/api/auth/google`;
 
   // Auto-scroll to bottom when messages change
   const scrollToBottom = useCallback(() => {
@@ -106,17 +110,17 @@ export function ChatPanel({
       try {
         const data = JSON.parse(event.data);
 
-	        switch (data.type) {
-	          case "message":
-	            setMessages((prev) => {
-	              const msg = data.payload as ChatMessage;
-	              // Deduplicate: React StrictMode double-invokes the effect,
-	              // causing sendInitialBatch to fire twice. Skip if we already
-	              // have this message ID in the array.
-	              if (prev.some((m) => m.id === msg.id)) return prev;
-	              return [...prev, msg];
-	            });
-	            break;
+        switch (data.type) {
+          case "message":
+            setMessages((prev) => {
+              const msg = data.payload as ChatMessage;
+              // Deduplicate by ID as defense-in-depth: overlapping connects
+              // (StrictMode, fast reconnects) can deliver the initial batch
+              // twice.
+              if (prev.some((m) => m.id === msg.id)) return prev;
+              return [...prev, msg];
+            });
+            break;
           case "error":
             if (data.payload?.code === "rate_limited") {
               setIsRateLimited(true);
@@ -150,6 +154,9 @@ export function ChatPanel({
     };
 
     ws.onclose = (event) => {
+      // Unmounted — never reconnect or touch state.
+      if (disposedRef.current) return;
+
       // Stream offline close code
       if (event.code === 4001) {
         setConnectionState("disconnected");
@@ -181,16 +188,16 @@ export function ChatPanel({
   });
 
   useEffect(() => {
+    disposedRef.current = false;
     if (!isVodReplay) {
       connect();
     }
 
     return () => {
-      // Cleanup on unmount
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
+      // Cleanup on unmount: mark disposed FIRST, then detach handlers and
+      // close — otherwise the socket's onclose fires after cleanup and
+      // schedules a reconnect + new ping interval that outlive the component.
+      disposedRef.current = true;
       if (reconnectTimerRef.current) {
         clearTimeout(reconnectTimerRef.current);
       }
@@ -199,6 +206,13 @@ export function ChatPanel({
       }
       if (rateLimitTimerRef.current) {
         clearInterval(rateLimitTimerRef.current);
+      }
+      if (wsRef.current) {
+        wsRef.current.onclose = null;
+        wsRef.current.onerror = null;
+        wsRef.current.onmessage = null;
+        wsRef.current.close();
+        wsRef.current = null;
       }
     };
   }, [connect, isVodReplay]);
@@ -309,6 +323,11 @@ export function ChatPanel({
                   alt={msg.userName}
                   className="w-6 h-6 rounded-full"
                   referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.onerror = null;
+                    target.src = AVATAR_FALLBACK;
+                  }}
                 />
               ) : (
                 <div className="w-6" />

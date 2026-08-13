@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -40,19 +41,23 @@ func (r *StreamRepo) CreateStream(ctx context.Context, userID string, title *str
 	return &s, nil
 }
 
-func (r *StreamRepo) EndStream(ctx context.Context, streamID string, hlsPath, recordingPath string, durationSeconds int) error {
-	_, err := r.pool.Exec(ctx, `
+// EndStreamIfLive transitions a live stream to offline and records the
+// end-of-stream metadata. It is a compare-and-swap on status = 'live': it
+// returns false when no live row matched, so concurrent end paths can
+// detect that another path already finalized the stream.
+func (r *StreamRepo) EndStreamIfLive(ctx context.Context, streamID string, hlsPath, recordingPath string, durationSeconds int) (bool, error) {
+	cmd, err := r.pool.Exec(ctx, `
 		UPDATE streams
 		SET ended_at = now(), status = 'offline',
 		    hls_path = $2, recording_path = $3,
 		    duration_seconds = $4
-		WHERE id = $1`,
+		WHERE id = $1 AND status = 'live'`,
 		streamID, hlsPath, recordingPath, durationSeconds,
 	)
 	if err != nil {
-		return fmt.Errorf("end stream: %w", err)
+		return false, fmt.Errorf("end stream: %w", err)
 	}
-	return nil
+	return cmd.RowsAffected() > 0, nil
 }
 
 func (r *StreamRepo) UpdateStreamStatus(ctx context.Context, streamID, status string) error {
@@ -100,7 +105,7 @@ func (r *StreamRepo) GetStreamByUserID(ctx context.Context, userID string) (*dom
 		&s.HLSPath, &s.RecordingPath, &s.RecordingStatus,
 		&s.PeakViewers, &s.TotalViewers, &s.DurationSeconds, &s.SRSClientID, &s.CreatedAt,
 	)
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, errs.NotFound("no live stream for user %s", userID)
 	}
 	if err != nil {
@@ -110,6 +115,10 @@ func (r *StreamRepo) GetStreamByUserID(ctx context.Context, userID string) (*dom
 }
 
 func (r *StreamRepo) GetStreamBySRSClientID(ctx context.Context, srsClientID string) (*domain.Stream, error) {
+	if srsClientID == "" {
+		// Guard: an empty ID would match legacy rows created without one.
+		return nil, errs.NotFound("stream with empty srs_client_id")
+	}
 	var s domain.Stream
 	err := r.pool.QueryRow(ctx, `
 		SELECT id, user_id, title, started_at, ended_at, status,
@@ -122,7 +131,7 @@ func (r *StreamRepo) GetStreamBySRSClientID(ctx context.Context, srsClientID str
 		&s.HLSPath, &s.RecordingPath, &s.RecordingStatus,
 		&s.PeakViewers, &s.TotalViewers, &s.DurationSeconds, &s.SRSClientID, &s.CreatedAt,
 	)
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, errs.NotFound("stream with srs_client_id %s not found", srsClientID)
 	}
 	if err != nil {
@@ -165,7 +174,7 @@ func (r *StreamRepo) ListLiveStreams(ctx context.Context) ([]domain.LiveStream, 
 		); err != nil {
 			return nil, fmt.Errorf("scan live stream: %w", err)
 		}
-		ls.StartedAt = startedAt.Format("2006-01-02T15:04:05Z")
+		ls.StartedAt = startedAt.UTC().Format(time.RFC3339)
 		thumbnailPath := "/hls/thumbnails/live/" + ls.StreamID + ".jpg"
 		ls.ThumbnailUrl = &thumbnailPath
 		result = append(result, ls)
@@ -202,14 +211,14 @@ func (r *StreamRepo) GetChannelInfo(ctx context.Context, userID string) (*domain
 		&info.StreamTitle, &info.StreamCategory,
 		&info.IsLive, &liveSince, &streamID, &hlsPath, &info.ViewerCount,
 	)
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, errs.NotFound("user %s not found", userID)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("query channel info: %w", err)
 	}
 	if info.IsLive && liveSince != nil {
-		ts := liveSince.Format("2006-01-02T15:04:05Z")
+		ts := liveSince.UTC().Format(time.RFC3339)
 		info.StartedAt = &ts
 	}
 	if hlsPath != "" {

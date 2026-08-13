@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
-import { getChannel } from "@/lib/api";
+import { ApiError, getChannel } from "@/lib/api";
 import { ChannelView } from "@/components/ChannelView";
 import type { Metadata } from "next";
 
@@ -35,11 +35,7 @@ export default async function ChannelPage({ params }: ChannelPageProps) {
   try {
     channel = await getChannel(id);
   } catch (error: unknown) {
-    if (
-      error instanceof Error &&
-      "status" in error &&
-      (error as { status: number }).status === 404
-    ) {
+    if (error instanceof ApiError && error.status === 404) {
       notFound();
     }
     throw error;
