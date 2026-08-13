@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { GoLivePreview } from "./GoLivePreview";
 
 vi.mock("@/lib/api", () => ({
@@ -126,13 +127,45 @@ describe("GoLivePreview", () => {
     });
   });
 
-  it("handles API error gracefully", async () => {
+  it("shows an error state (not the empty state) when the API fails", async () => {
     vi.mocked(getChannel).mockRejectedValue(new Error("Network error"));
 
     render(<GoLivePreview userId="user-1" isLive={false} />);
 
     await waitFor(() => {
-      expect(screen.getByText("Not streaming yet")).toBeInTheDocument();
+      expect(screen.getByText("Couldn't load your stream")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Not streaming yet")).not.toBeInTheDocument();
+  });
+
+  it("recovers to the live state via Retry after a failure", async () => {
+    const user = userEvent.setup();
+    vi.mocked(getChannel)
+      .mockRejectedValueOnce(new Error("Network error"))
+      .mockResolvedValue({
+        userId: "user-1",
+        streamerName: "Test User",
+        streamerAvatarUrl: "https://example.com/avatar.jpg",
+        streamTitle: "My Live Stream",
+        streamCategory: "Just Chatting",
+        isLive: true,
+        viewerCount: 42,
+        hlsUrl: "/hls/live/test.m3u8",
+        thumbnailUrl: "/hls/live/test.m3u8",
+        startedAt: "2026-08-10T12:00:00Z",
+        streamId: "stream-1",
+      });
+
+    render(<GoLivePreview userId="user-1" isLive={true} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Couldn't load your stream")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText("Retry"));
+
+    await waitFor(() => {
+      expect(screen.getByText("LIVE")).toBeInTheDocument();
     });
   });
 });

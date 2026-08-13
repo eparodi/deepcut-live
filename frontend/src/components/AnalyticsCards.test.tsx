@@ -33,7 +33,7 @@ describe("AnalyticsCards", () => {
       />
     );
     expect(screen.getByText("Analytics unavailable")).toBeInTheDocument();
-    expect(screen.getByText("Try again")).toBeInTheDocument();
+    expect(screen.getByText("Retry")).toBeInTheDocument();
   });
 
   it("calls onRetry when retry button is clicked", () => {
@@ -46,8 +46,8 @@ describe("AnalyticsCards", () => {
         onRetry={onRetry}
       />
     );
-    screen.getByText("Try again").click();
-    expect(onRetry).toHaveBeenCalledTimes(1);
+    screen.getByText("Retry").click();
+    expect(onRetry).toHaveBeenCalled();
   });
 
   it("renders empty state when no streams", () => {

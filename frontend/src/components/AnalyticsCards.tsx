@@ -102,7 +102,7 @@ export function AnalyticsCards({
             className="mt-3 text-sm font-medium hover:underline"
             style={{ color: "var(--color-primary-text)" }}
           >
-            Try again
+            Retry
           </button>
         </div>
       </section>

@@ -47,7 +47,7 @@ export function StreamKeyDisplay({ streamKey }: StreamKeyDisplayProps) {
         id="key-heading"
         className="text-lg font-semibold text-[var(--color-text)] mb-4"
       >
-        Stream Settings
+        Server & Stream Key
       </h2>
 
       {/* Server URL */}

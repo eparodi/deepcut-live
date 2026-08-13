@@ -91,8 +91,8 @@ describe("DashboardPage", () => {
     render(<DashboardPage />);
 
     await waitFor(() => {
-      const headings = screen.getAllByText("Stream Settings");
-      expect(headings.length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText("Server & Stream Key")).toBeInTheDocument();
+      expect(screen.getByText("Stream Settings")).toBeInTheDocument();
     });
   });
 

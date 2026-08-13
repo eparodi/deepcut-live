@@ -31,6 +31,12 @@ export default async function HomePage() {
 
   return (
     <main className="flex-1 w-full max-w-7xl mx-auto px-6 py-8">
+      {/* Page-level h1 must exist even when streams render (WCAG heading
+          order): the hero h1 below only renders for the empty state. */}
+      {streams.length > 0 && (
+        <h1 className="sr-only">DeepCut Live — Browse live streams</h1>
+      )}
+
       {/* Hero — shown only when no live streams */}
       {streams.length === 0 && (
         <div className="text-center mb-12 mt-8">

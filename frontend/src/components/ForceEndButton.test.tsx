@@ -82,4 +82,39 @@ describe("ForceEndButton", () => {
       expect(onError).toHaveBeenCalledWith("Server error");
     });
   });
+
+  // Focus management (specs/ui-ux-audit-v1.md D3)
+
+  it("moves focus into the dialog when it opens", async () => {
+    const user = userEvent.setup();
+    render(<ForceEndButton onEnded={vi.fn()} onError={vi.fn()} />);
+    await user.click(screen.getByText("⏹ End Stream"));
+    expect(screen.getByText("Keep Streaming")).toHaveFocus();
+  });
+
+  it("closes on Escape and restores focus to the trigger", async () => {
+    const user = userEvent.setup();
+    render(<ForceEndButton onEnded={vi.fn()} onError={vi.fn()} />);
+    const trigger = screen.getByText("⏹ End Stream");
+    await user.click(trigger);
+    expect(screen.getByText("End Stream?")).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByText("End Stream?")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
+  it("traps Tab within the dialog", async () => {
+    const user = userEvent.setup();
+    render(<ForceEndButton onEnded={vi.fn()} onError={vi.fn()} />);
+    await user.click(screen.getByText("⏹ End Stream"));
+
+    const confirm = screen.getByText("End Stream");
+    confirm.focus();
+    await user.tab();
+
+    // Tab on the last control wraps to the first.
+    expect(screen.getByText("Keep Streaming")).toHaveFocus();
+  });
 });

@@ -23,7 +23,7 @@ describe("VodError", () => {
     const error = new Error("Oops");
     const reset = vi.fn();
     render(<VodError error={error} reset={reset} />);
-    screen.getByText("Try again").click();
+    screen.getByText("Retry").click();
     expect(reset).toHaveBeenCalledTimes(1);
   });
 

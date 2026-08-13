@@ -225,7 +225,7 @@ function SearchContent() {
             className="mt-4 inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:opacity-90"
             style={{ backgroundColor: "var(--color-primary)" }}
           >
-            Try again
+            Retry
           </button>
         </div>
       )}

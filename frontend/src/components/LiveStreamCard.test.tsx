@@ -96,4 +96,14 @@ describe("LiveStreamCard", () => {
       "TestStreamer is live: Awesome Stream. 1234 viewers"
     );
   });
+
+  it("renders the compact list variant as a linkable row", () => {
+    render(<LiveStreamCard stream={baseStream} variant="list" />);
+    expect(screen.getByText("TestStreamer")).toBeInTheDocument();
+    expect(screen.getByText("Awesome Stream")).toBeInTheDocument();
+    expect(screen.getByText("LIVE")).toBeInTheDocument();
+    const link = screen.getByRole("listitem");
+    expect(link).toHaveAttribute("href", "/channel/user-1");
+    expect(link.className).toContain("flex");
+  });
 });

@@ -144,4 +144,17 @@ describe("LiveGrid", () => {
       "true"
     );
   });
+
+  it("switches to the compact list layout when list view is selected", () => {
+    render(<LiveGrid streams={[baseStream]} total={1} />);
+    fireEvent.click(screen.getByLabelText("List view"));
+
+    const list = screen.getByRole("list");
+    expect(list.className).toContain("flex");
+    // The card still links to the channel in list mode.
+    expect(screen.getByRole("listitem")).toHaveAttribute(
+      "href",
+      "/channel/user-1"
+    );
+  });
 });

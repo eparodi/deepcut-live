@@ -1,9 +1,10 @@
 "use client";
 // Client Component — needs useState for dialog state and API call
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Spinner } from "@/components/ui/Spinner";
 import { regenerateStreamKey } from "@/lib/api";
+import { useDialogFocus } from "@/lib/useDialogFocus";
 
 interface RegenerateKeyButtonProps {
   onRegenerated: (newKey: string) => void;
@@ -16,6 +17,13 @@ export function RegenerateKeyButton({
 }: RegenerateKeyButtonProps) {
   const [showDialog, setShowDialog] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const closeDialog = useCallback(() => setShowDialog(false), []);
+  const dialogRef = useDialogFocus({
+    open: showDialog,
+    onClose: closeDialog,
+    enabled: !loading,
+  });
 
   async function handleConfirm() {
     setLoading(true);
@@ -57,11 +65,13 @@ export function RegenerateKeyButton({
           {/* Backdrop */}
           <div
             className="absolute inset-0 bg-black/60"
-            onClick={() => !loading && setShowDialog(false)}
+            onClick={() => !loading && closeDialog()}
           />
 
           {/* Dialog card */}
           <div
+            ref={dialogRef}
+            tabIndex={-1}
             className="relative w-full max-w-md rounded-xl p-6 shadow-2xl"
             style={{ backgroundColor: "var(--color-surface-raised)" }}
           >
@@ -79,7 +89,7 @@ export function RegenerateKeyButton({
 
             <div className="mt-6 flex gap-3 justify-end">
               <button
-                onClick={() => setShowDialog(false)}
+                onClick={closeDialog}
                 disabled={loading}
                 className="rounded-lg px-4 py-2 text-sm font-medium transition-colors hover:opacity-80"
                 style={{

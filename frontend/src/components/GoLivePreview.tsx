@@ -15,12 +15,16 @@ interface GoLivePreviewProps {
 export function GoLivePreview({ userId, isLive }: GoLivePreviewProps) {
   const [channel, setChannel] = useState<ChannelResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  // Fetch failure is a distinct state: never render "Not streaming yet"
+  // when the API is merely unreachable.
+  const [error, setError] = useState(false);
 
   const fetchChannel = useCallback(() => {
     setLoading(true);
+    setError(false);
     getChannel(userId)
       .then(setChannel)
-      .catch(() => setChannel(null))
+      .catch(() => setError(true))
       .finally(() => setLoading(false));
   }, [userId]);
 
@@ -51,6 +55,28 @@ export function GoLivePreview({ userId, isLive }: GoLivePreviewProps) {
         <div
           className="w-full aspect-video rounded-xl skeleton"
         />
+      ) : error ? (
+        <div
+          className="rounded-xl p-6 text-center space-y-3"
+          style={{ backgroundColor: "var(--color-surface)" }}
+          role="alert"
+        >
+          <p className="text-4xl">⚠️</p>
+          <h3 className="text-base font-semibold text-[var(--color-text)]">
+            Couldn&apos;t load your stream
+          </h3>
+          <p className="text-sm text-[var(--color-text-muted)] max-w-sm mx-auto">
+            The server didn&apos;t respond. Your stream may still be live —
+            check OBS. We&apos;ll keep retrying while you stream.
+          </p>
+          <button
+            onClick={fetchChannel}
+            className="inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:opacity-90"
+            style={{ backgroundColor: "var(--color-primary)" }}
+          >
+            Retry
+          </button>
+        </div>
       ) : isLive && hlsUrl ? (
         <div className="space-y-4">
           {/* Live badge + viewer count */}

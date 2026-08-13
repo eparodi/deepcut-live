@@ -182,7 +182,11 @@ function LiveGridContent({ streams, total }: LiveGridProps) {
       {/* Stream cards */}
       <div className={gridClass} role="list">
         {sortedStreams.map((stream) => (
-          <LiveStreamCard key={stream.userId} stream={stream} />
+          <LiveStreamCard
+            key={stream.userId}
+            stream={stream}
+            variant={viewMode}
+          />
         ))}
       </div>
     </section>

@@ -33,9 +33,9 @@ export default function DashboardError({
           className="rounded-xl p-8 text-center max-w-md"
           style={{ backgroundColor: "var(--color-surface-raised)" }}
         >
-          <h2 className="text-lg font-semibold text-[var(--color-text)]">
+          <h1 className="text-lg font-semibold text-[var(--color-text)]">
             Something went wrong
-          </h2>
+          </h1>
           <p className="mt-2 text-sm text-[var(--color-text-muted)]">
             An unexpected error occurred while loading your dashboard.
           </p>
@@ -50,7 +50,7 @@ export default function DashboardError({
               className="rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:opacity-90"
               style={{ backgroundColor: "var(--color-primary)" }}
             >
-              Try again
+              Retry
             </button>
             <Link
               href="/"

@@ -83,13 +83,16 @@ describe("Toast", () => {
     expect(el.style.backgroundColor).toBe("var(--color-primary)");
   });
 
-  it("applies error background color", () => {
+  it("applies error background color and alert role", () => {
     const onDismiss = vi.fn();
     render(
       <Toast message="Fail" variant="error" onDismiss={onDismiss} />
     );
-    const el = screen.getByRole("status");
+    const el = screen.getByRole("alert");
     expect(el.style.backgroundColor).toBe("var(--color-danger)");
+    expect(el).toHaveAttribute("aria-live", "assertive");
+    // Variant is never color-only: the ⚠️ icon is present (WCAG 1.4.1).
+    expect(el.textContent).toContain("⚠️");
   });
 
   it("has aria-live polite for screen readers", () => {

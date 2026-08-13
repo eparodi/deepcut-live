@@ -21,7 +21,7 @@ describe("DashboardError", () => {
     const error = new Error("Oops");
     const reset = vi.fn();
     render(<DashboardError error={error} reset={reset} />);
-    screen.getByText("Try again").click();
+    screen.getByText("Retry").click();
     expect(reset).toHaveBeenCalledTimes(1);
   });
 

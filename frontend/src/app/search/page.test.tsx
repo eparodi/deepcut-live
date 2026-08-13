@@ -142,7 +142,7 @@ describe("SearchPage", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Something went wrong")).toBeInTheDocument();
-      expect(screen.getByText("Try again")).toBeInTheDocument();
+      expect(screen.getByText("Retry")).toBeInTheDocument();
     });
   });
 

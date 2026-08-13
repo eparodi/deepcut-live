@@ -24,14 +24,20 @@ export function Toast({
   const bgColor =
     variant === "success" ? "var(--color-primary)" : "var(--color-danger)";
 
+  // Variant must never be conveyed by color alone (WCAG 1.4.1):
+  // errors get role=alert (assertive) + ⚠️, successes role=status + ✓.
+  const icon = variant === "success" ? "✓" : "⚠️";
+  const role = variant === "success" ? "status" : "alert";
+  const ariaLive = variant === "success" ? "polite" : "assertive";
+
   return (
     <div
       className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-lg text-white text-sm font-medium shadow-lg animate-fade-up"
       style={{ backgroundColor: bgColor }}
-      role="status"
-      aria-live="polite"
+      role={role}
+      aria-live={ariaLive}
     >
-      {message}
+      <span aria-hidden="true">{icon}</span> {message}
     </div>
   );
 }
