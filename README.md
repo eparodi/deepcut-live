@@ -248,7 +248,7 @@ your-monorepo/
 │       ├── go-chi/SKILL.md           # Go/chi stack standards
 │       ├── nextjs/SKILL.md           # Next.js stack standards
 │       ├── expo/SKILL.md             # Expo/RN stack standards
-│       └── orchestrator/SKILL.md     # Single-thread PLANNER/CODER/REVIEWER/DEBUGGER loop
+│       └── orchestrator/SKILL.md  # Single-thread PLANNER/CODER/REVIEWER/DEBUGGER loop
 ├── backend/                          # Go code
 ├── frontend/                         # Next.js code
 └── mobile/                           # Expo/RN code

@@ -55,8 +55,11 @@ gate on requirements or design — that is what `spec-driven` is for.
                    `cd backend && go test -run Integration -count=1 -p 1 ./...`
 - Frontend typecheck: `cd frontend && npx tsc --noEmit`
 - Frontend tests:  `cd frontend && npm test`   (= `vitest run`)
-- Frontend lint:   `cd frontend && npm run lint`  (CI enforces `--max-warnings 0`)
+- Frontend lint:   `cd frontend && npm run lint`  (plain `eslint`, config: `frontend/eslint.config.mjs`)
 - Frontend build:  `cd frontend && npm run build`
+- Before ANY npm/npx command: verify `node --version` matches
+  `frontend/.nvmrc` (24.19.0). On mismatch, prefix the command with
+  `PATH="$HOME/.nvm/versions/node/v$(cat frontend/.nvmrc)/bin:$PATH"`.
 
 ### Governing rules (already in repo — follow them)
 
@@ -104,8 +107,10 @@ square brackets.
 - Runs the verification command(s) declared in the subtask's PLAN.md line,
   plus the relevant build/lint/typecheck:
     - backend touched  → `cd backend && go build ./... && go vet ./... && go test -short -count=1 ./...`
-    - frontend touched → `cd frontend && npx tsc --noEmit && npm run lint && npm test`
+    - frontend touched → verify Node matches `.nvmrc` first, then
+      `cd frontend && npx tsc --noEmit && npm run lint && npm test`
     - integration-only changes → also `go test -run Integration -count=1 -p 1 ./...`
+- Also runs the ALWAYS-CHECKS list (next section) on every iteration.
 - Verdicts are binary: PASS or FAIL (with the exact error output).
 
 **[DEBUGGER]**
@@ -115,6 +120,34 @@ square brackets.
 - Rewrites only the code responsible. Never "fixes" a test by deleting or
   weakening it. Never discards meaningful code to silence diagnostics.
 - After a fix, control returns to [REVIEWER].
+
+---
+
+## REVIEWER ALWAYS-CHECKS (permanent rules — check AND apply every iteration)
+
+Derived from the PR #27 review. REVIEWER enforces these on EVERY
+iteration, in addition to the build/test/lint commands. When a check
+fails, the current role fixes it immediately — checks are not optional.
+
+1. **Facts stay verified.** Never state CI/config behavior in PLAN.md,
+   LOOP_LOG.md, or the code unless you have read it in
+   `.github/workflows/` or the actual config file during this run
+   (e.g., do NOT claim `--max-warnings 0` — frontend CI runs plain
+   `npm run lint`).
+2. **Docs edits stay consistent.** If you touch `README.md` /
+   `HOW_WE_WORK.md`, keep diagrams aligned, tables accurate, and claims
+   matching real CI/config behavior.
+3. **Gitignore anchoring.** New working-doc patterns must be anchored to
+   the repo root (`/PLAN.md`), never bare names — bare patterns match at
+   any depth and silently ignore same-named files elsewhere.
+4. **Node version guard.** Verify `node --version` matches
+   `frontend/.nvmrc` before every npm/npx command.
+5. **Business-rule ambiguity.** Never resolved with an assumption —
+   stop-and-ask is mandatory (AGENTS.md §3.1).
+6. **Session log current.** After every correction, append to
+   `specs/memories/<YYYY-MM-DD>-session-log.md` (AGENTS.md §9.1); at
+   session end, run the retro (§9.2) and fold missing rules back into
+   this skill or AGENTS.md.
 
 ---
 
@@ -148,16 +181,20 @@ LOOP:
 - NEVER ask the user "Should I...", "Do you want me to...", or wait for
   confirmation between subtasks. Decide and proceed.
 - Errors are your problem, not the user's: retry, root-cause, re-plan.
-  Asking the user for help is the LAST resort, after genuine blockage.
+  Asking the user for help is the LAST resort, after genuine blockage —
+  EXCEPT for business-rule ambiguity, where stop-and-ask is MANDATORY
+  (see below; AGENTS.md §3.1 overrides this section).
 - Handle missing environment gracefully: if Docker/Postgres is required
   for integration tests and unavailable, start it via
   `docker compose up -d postgres` if permitted; if not possible, fall back
   to unit tests and note the gap in LOOP_LOG.md.
-- Do NOT guess business rules. If the spec is silent on a decision that
-  changes behavior (pricing, permissions, status codes in the contract),
-  pick the option consistent with existing specs/code and record the
-  assumption in LOOP_LOG.md with an `[Assumption]` tag; only escalate to
-  the user if no existing precedent exists and the choice is irreversible.
+- Do NOT guess business rules (AGENTS.md §3.1 — this is the ONE mandatory
+  exception to the no-questions rule). If the spec is silent on a decision
+  that changes behavior (pricing, permissions, status codes) and no
+  existing spec/code precedent covers it, STOP and ask the user instead of
+  proceeding. For every OTHER ambiguous decision, pick the option
+  consistent with existing specs/code, record it in LOOP_LOG.md with an
+  `[Assumption]` tag, and proceed.
 - Never hardcode secrets. Use env vars with dev defaults (and log a
   `slog.Warn` for dev-default secrets in Go).
 
@@ -184,6 +221,12 @@ LOOP:
    - NEVER repeat a fix you have already logged as failed without a
      different root-cause theory.
 
+3. `specs/memories/<YYYY-MM-DD>-session-log.md`
+   - AGENTS.md §9.1: every session with corrections/bug fixes logs them
+     here (correction → root cause → fix). Update after EVERY correction,
+     not just at the end. At session end, run the §9.2 retro and update
+     this skill or AGENTS.md with any missing rule.
+
 ---
 
 ## DEFINITION OF DONE
@@ -192,6 +235,8 @@ LOOP:
 - Backend build + vet + unit tests pass; frontend typecheck + lint + tests
   pass; any integration test claimed as run actually ran.
 - LOOP_LOG.md contains a complete trace of every iteration.
+- `specs/memories/<YYYY-MM-DD>-session-log.md` is up to date with every
+  correction (AGENTS.md §9.1).
 - Final message to the user: a concise summary of what was implemented,
   files changed, validation run (with real results), and any
   `[Assumption]`s or follow-ups — no "Should I...?" questions.
