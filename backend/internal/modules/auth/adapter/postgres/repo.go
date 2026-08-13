@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
@@ -50,7 +51,7 @@ func (r *AuthRepo) GetByGoogleID(ctx context.Context, googleID string) (*domain.
 		&u.StreamKey, &u.StreamKeyHash, &u.StreamTitle, &u.StreamCategory,
 		&u.IsLive, &u.CreatedAt, &u.UpdatedAt,
 	)
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, errs.NotFound("user with google_id %s not found", googleID)
 	}
 	if err != nil {
@@ -71,7 +72,7 @@ func (r *AuthRepo) GetByID(ctx context.Context, id string) (*domain.User, error)
 		&u.StreamKey, &u.StreamKeyHash, &u.StreamTitle, &u.StreamCategory,
 		&u.IsLive, &u.CreatedAt, &u.UpdatedAt,
 	)
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, errs.NotFound("user %s not found", id)
 	}
 	if err != nil {
@@ -85,7 +86,7 @@ func (r *AuthRepo) GetByID(ctx context.Context, id string) (*domain.User, error)
 func (r *AuthRepo) GetUserIDByStreamKeyHash(ctx context.Context, hash string) (string, error) {
 	var userID string
 	err := r.pool.QueryRow(ctx, `SELECT id FROM users WHERE stream_key_hash = $1`, hash).Scan(&userID)
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return "", errs.NotFound("user with stream key hash not found")
 	}
 	if err != nil {
@@ -106,7 +107,7 @@ func (r *AuthRepo) GetByStreamKeyHash(ctx context.Context, hash string) (*domain
 		&u.StreamKey, &u.StreamKeyHash, &u.StreamTitle, &u.StreamCategory,
 		&u.IsLive, &u.CreatedAt, &u.UpdatedAt,
 	)
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, errs.NotFound("user with stream key hash not found")
 	}
 	if err != nil {

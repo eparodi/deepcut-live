@@ -1,20 +1,12 @@
+"use client";
+// Client Component — needs img onError fallback handler
+
 import type { ChannelResponse } from "@/types";
+import { AVATAR_FALLBACK } from "@/lib/fallbacks";
+import { formatViewerCount } from "@/lib/format";
 
 interface StreamInfoProps {
   channel: ChannelResponse;
-}
-
-/** Format a viewer count for display */
-function formatViewerCount(n: number): string {
-  if (n >= 1_000_000) {
-    const val = n / 1_000_000;
-    return val % 1 === 0 ? `${val}M` : `${val.toFixed(1)}M`;
-  }
-  if (n >= 1_000) {
-    const val = n / 1_000;
-    return val % 1 === 0 ? `${val}k` : `${val.toFixed(1)}k`;
-  }
-  return n.toLocaleString();
 }
 
 export function StreamInfo({ channel }: StreamInfoProps) {
@@ -42,6 +34,11 @@ export function StreamInfo({ channel }: StreamInfoProps) {
           alt={streamerName}
           className="w-10 h-10 rounded-full"
           referrerPolicy="no-referrer"
+          onError={(e) => {
+            const target = e.target as HTMLImageElement;
+            target.onerror = null;
+            target.src = AVATAR_FALLBACK;
+          }}
         />
         <div>
           <p className="text-sm font-semibold text-[var(--color-text)]">

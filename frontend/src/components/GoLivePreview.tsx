@@ -2,6 +2,7 @@
 // Client Component — fetches channel info to show live preview + stream link.
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import { getChannel } from "@/lib/api";
 import type { ChannelResponse } from "@/types";
 import { VideoPlayer } from "@/components/VideoPlayer";
@@ -72,13 +73,13 @@ export function GoLivePreview({ userId, isLive }: GoLivePreviewProps) {
           <VideoPlayer hlsUrl={hlsUrl} isLive={true} />
 
           {/* Channel link button */}
-          <a
+          <Link
             href={`/channel/${userId}`}
             className="inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:opacity-90"
             style={{ backgroundColor: "var(--color-primary)" }}
           >
             📺 View My Stream
-          </a>
+          </Link>
 
           {/* Stream key reassurance */}
           <p className="text-xs text-[var(--color-text-muted)]">
@@ -109,13 +110,13 @@ export function GoLivePreview({ userId, isLive }: GoLivePreviewProps) {
           </p>
 
           {/* Channel link (always available even when offline) */}
-          <a
+          <Link
             href={`/channel/${userId}`}
             className="inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:opacity-90"
             style={{ backgroundColor: "var(--color-primary)" }}
           >
             📺 View My Channel
-          </a>
+          </Link>
         </div>
       )}
     </section>

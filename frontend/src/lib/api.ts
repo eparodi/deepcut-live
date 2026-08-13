@@ -5,7 +5,9 @@
 
 // Use same-origin URL; Next.js rewrites proxy /api/* to the Go backend.
 // Absolute URL needed for SSR (server-side fetch has no base to resolve relatives).
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+// Exported so components building links (sign-in redirects) share ONE base URL.
+export const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
 export class ApiError extends Error {
   status: number;
@@ -168,13 +170,16 @@ export function getVodDetail(vodId: string): Promise<VodDetail> {
 }
 
 /** GET /api/vods — search / browse VODs */
-export function searchVods(params: {
-  query?: string;
-  userId?: string;
-  page?: number;
-  limit?: number;
-  sort?: "recent" | "popular" | "longest";
-} = {}): Promise<SearchResponse> {
+export function searchVods(
+  params: {
+    query?: string;
+    userId?: string;
+    page?: number;
+    limit?: number;
+    sort?: "recent" | "popular" | "longest";
+  } = {},
+  options: { signal?: AbortSignal } = {}
+): Promise<SearchResponse> {
   const { query, userId, page = 1, limit = 20, sort } = params;
   const offset = (page - 1) * limit;
   const searchParams = new URLSearchParams();
@@ -183,7 +188,7 @@ export function searchVods(params: {
   if (sort) searchParams.set("sort", sort);
   searchParams.set("limit", String(limit));
   searchParams.set("offset", String(offset));
-  return api<SearchResponse>(`/api/vods?${searchParams.toString()}`);
+  return api<SearchResponse>(`/api/vods?${searchParams.toString()}`, options);
 }
 
 /** GET /api/vods?sort=recent&limit=N — recent VODs for homepage */

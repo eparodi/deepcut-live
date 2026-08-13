@@ -79,10 +79,13 @@ func setupTestServer(t *testing.T) (*httptest.Server, func()) {
 	baseURL := "http://localhost:3000"
 	srsSecret := "test-srs-secret"
 
-	authSvc := application.NewAuthService(
+	authSvc, err := application.NewAuthService(
 		authRepo, "test-client-id", "test-client-secret",
 		baseURL, privPEM, pubPEM,
 	)
+	if err != nil {
+		t.Fatalf("new auth service: %v", err)
+	}
 	streamSvc := streamapp.NewStreamService(streamRepo, authRepo, nil, nil, srsSecret, "http://127.0.0.1:1985", nil)
 	vodSvc := vodapp.NewVODService(vodRepo)
 

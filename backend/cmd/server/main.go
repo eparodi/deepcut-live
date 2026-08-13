@@ -8,7 +8,6 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -46,7 +45,13 @@ import (
 
 func main() {
 	logger := newLogger()
+	if err := run(logger); err != nil {
+		logger.Error("server exited with error", "err", err)
+		os.Exit(1)
+	}
+}
 
+func run(logger *slog.Logger) error {
 	port := env("PORT", "8081")
 	dbURL := env("DATABASE_URL", "postgres://live:live@localhost:5432/live?sslmode=disable")
 	googleClientID := env("GOOGLE_CLIENT_ID", "")
@@ -56,19 +61,26 @@ func main() {
 	srsSecret := env("SRS_CALLBACK_SECRET", "dev-srs-secret")
 	srsAPIURL := env("SRS_API_URL", "http://srs:1985")
 
+	if os.Getenv("SRS_CALLBACK_SECRET") == "" {
+		logger.Warn("using dev-default SRS callback secret; set SRS_CALLBACK_SECRET in production")
+	}
+
 	// Load or generate ECDSA key pair for JWT
-	privateKeyPEM, publicKeyPEM := loadOrGenerateKeys()
+	privateKeyPEM, publicKeyPEM, err := loadOrGenerateKeys()
+	if err != nil {
+		return fmt.Errorf("load jwt keys: %w", err)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	poolCfg, err := pgxpool.ParseConfig(dbURL)
 	if err != nil {
-		log.Fatalf("parse db url: %v", err)
+		return fmt.Errorf("parse db url: %w", err)
 	}
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
-		log.Fatalf("connect db: %v", err)
+		return fmt.Errorf("connect db: %w", err)
 	}
 	defer pool.Close()
 
@@ -77,21 +89,24 @@ func main() {
 	vodRepo := vodpg.NewVODRepo(pool)
 	chatRepo := chatpg.NewChatRepo(pool)
 
-	authSvc := authapp.NewAuthService(authRepo, googleClientID, googleClientSecret, baseURL, privateKeyPEM, publicKeyPEM)
+	authSvc, err := authapp.NewAuthService(authRepo, googleClientID, googleClientSecret, baseURL, privateKeyPEM, publicKeyPEM)
+	if err != nil {
+		return fmt.Errorf("new auth service: %w", err)
+	}
 	streamHub := streamapp.NewStreamHub(logger)
 
 	// Run River schema migration before creating queue
 	migrator, migErr := rivermigrate.New(riverpgxv5.New(pool), nil)
 	if migErr != nil {
-		slog.Warn("river migrator creation failed", "err", migErr)
+		logger.Warn("river migrator creation failed", "err", migErr)
 	} else if _, migErr := migrator.Migrate(context.Background(), rivermigrate.DirectionUp, nil); migErr != nil {
-		slog.Warn("river migration failed", "err", migErr)
+		logger.Warn("river migration failed", "err", migErr)
 	}
 	// Declare as interface type so a nil concrete value stays nil
 	var vodQueue voddomain.VODQueue
 	q, err := vodriver.NewQueue(pool)
 	if err != nil {
-		slog.Warn("vod queue creation failed", "err", err)
+		logger.Warn("vod queue creation failed", "err", err)
 	} else {
 		vodQueue = q
 	}
@@ -120,7 +135,9 @@ func main() {
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
+		if _, err := w.Write([]byte("ok")); err != nil {
+			logger.Debug("health write failed", "err", err)
+		}
 	})
 
 	authHandler.RegisterRoutes(r)
@@ -138,7 +155,13 @@ func main() {
 
 	// Background poller: queries SRS API for active streams.
 	// Falls back when SRS http_hooks callbacks don't fire.
-	go streamSvc.StartSRSPoller(context.Background())
+	pollerCtx, pollerCancel := context.WithCancel(context.Background())
+	defer pollerCancel()
+	pollerDone := make(chan struct{})
+	go func() {
+		defer close(pollerDone)
+		streamSvc.StartSRSPoller(pollerCtx)
+	}()
 
 	srv := &http.Server{
 		Addr:              ":" + port,
@@ -149,51 +172,63 @@ func main() {
 		ReadHeaderTimeout: 2 * time.Second,
 	}
 
+	serveErr := make(chan error, 1)
 	go func() {
 		logger.Info("server starting", "port", port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("listen: %v", err)
+			serveErr <- err
 		}
 	}()
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
+
+	select {
+	case err := <-serveErr:
+		return fmt.Errorf("listen: %w", err)
+	case <-quit:
+	}
 	logger.Info("shutting down...")
+
+	// Stop the poller before the HTTP server so it doesn't create streams
+	// while we're draining.
+	pollerCancel()
+	<-pollerDone
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Fatalf("shutdown: %v", err)
+		return fmt.Errorf("shutdown: %w", err)
 	}
+	return nil
 }
 
-func loadOrGenerateKeys() (privatePEM, publicPEM string) {
+func loadOrGenerateKeys() (privatePEM, publicPEM string, err error) {
 	privEnv := os.Getenv("JWT_PRIVATE_KEY")
 	pubEnv := os.Getenv("JWT_PUBLIC_KEY")
 	if privEnv != "" && pubEnv != "" {
-		return privEnv, pubEnv
+		return privEnv, pubEnv, nil
 	}
 
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		log.Fatalf("generate ecdsa key: %v", err)
+		return "", "", fmt.Errorf("generate ecdsa key: %w", err)
 	}
 
 	privBytes, err := x509.MarshalECPrivateKey(key)
 	if err != nil {
-		log.Fatalf("marshal private key: %v", err)
+		return "", "", fmt.Errorf("marshal private key: %w", err)
 	}
 	privPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: privBytes})
 
 	pubBytes, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
 	if err != nil {
-		log.Fatalf("marshal public key: %v", err)
+		return "", "", fmt.Errorf("marshal public key: %w", err)
 	}
 	pubPEM := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pubBytes})
 
 	fmt.Fprintf(os.Stderr, "Generated new ECDSA P-256 key pair. Set JWT_PRIVATE_KEY and JWT_PUBLIC_KEY env vars for persistence.\n")
-	return string(privPEM), string(pubPEM)
+	return string(privPEM), string(pubPEM), nil
 }
 
 func newLogger() *slog.Logger {

@@ -1,26 +1,13 @@
 "use client";
-// Client Component — needs onClick for navigation (Link)
+// Client Component — needs img onError fallback handlers
 
 import Link from "next/link";
 import type { VodItem } from "@/types";
 import { AVATAR_FALLBACK, THUMBNAIL_FALLBACK } from "@/lib/fallbacks";
+import { formatDuration } from "@/lib/format";
 
 interface VodCardProps {
   vod: VodItem;
-}
-
-/** Format duration in seconds to human-readable: 3661 → "1h 1m", 2700 → "45m", 30 → "30s" */
-function formatDuration(totalSeconds: number): string {
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-  if (minutes > 0) {
-    return `${minutes}m`;
-  }
-  return `${seconds}s`;
 }
 
 /** Format an ISO date to a relative time string: "2 days ago", "just now" */

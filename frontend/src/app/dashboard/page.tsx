@@ -67,15 +67,23 @@ function DashboardContent() {
   // proxy WebSocket upgrades, but cross-port cookies on localhost are sent
   // because SameSite=Lax treats all localhost ports as same-site.
   useEffect(() => {
-    const wsURL = "ws://localhost:8081/api/streams/ws";
+    const wsHost = process.env.NEXT_PUBLIC_WS_URL || "http://localhost:8081";
+    const wsBase = new URL(wsHost);
+    const wsProtocol = wsBase.protocol === "https:" ? "wss:" : "ws:";
+    const wsURL = `${wsProtocol}//${wsBase.host}/api/streams/ws`;
 
     let ws: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout>;
+    let reconnectAttempt = 0;
+    // Set on unmount so a late onclose can't schedule a reconnect — the
+    // browser fires onclose after cleanup runs ws.close().
+    let disposed = false;
 
     function connect() {
       ws = new WebSocket(wsURL);
 
       ws.onopen = () => {
+        reconnectAttempt = 0;
         // Refresh immediately on connect to get current state.
         fetchData(true);
       };
@@ -93,8 +101,14 @@ function DashboardContent() {
       };
 
       ws.onclose = () => {
-        // Reconnect after 5 seconds.
-        reconnectTimer = setTimeout(connect, 5_000);
+        if (disposed) return;
+        // Reconnect with exponential backoff (1s → 30s cap, max 10 tries);
+        // the 30s poll below keeps data fresh if we give up.
+        if (reconnectAttempt < 10) {
+          const delay = Math.min(1000 * 2 ** reconnectAttempt, 30_000);
+          reconnectAttempt += 1;
+          reconnectTimer = setTimeout(connect, delay);
+        }
       };
 
       ws.onerror = () => {
@@ -105,8 +119,14 @@ function DashboardContent() {
     connect();
 
     return () => {
+      disposed = true;
       clearTimeout(reconnectTimer);
-      ws?.close();
+      if (ws) {
+        ws.onclose = null;
+        ws.onerror = null;
+        ws.onmessage = null;
+        ws.close();
+      }
     };
   }, [fetchData]);
 

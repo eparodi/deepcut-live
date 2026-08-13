@@ -1,7 +1,7 @@
 "use client";
 // Client Component — search input, pagination, error handling
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { searchVods } from "@/lib/api";
@@ -11,20 +11,28 @@ import type { VodItem } from "@/types";
 type SearchState =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "results"; vods: VodItem[]; totalCount: number; page: number; loadingMore: boolean }
+  | {
+      status: "results";
+      /** The query that produced these results (NOT the live input value). */
+      query: string;
+      vods: VodItem[];
+      totalCount: number;
+      page: number;
+      loadingMore: boolean;
+    }
   | { status: "empty"; query: string }
   | { status: "error"; query: string };
 
 const PAGE_SIZE = 20;
 
-export default function SearchPage() {
+function SearchContent() {
   const searchParams = useSearchParams();
-  const initialQuery = searchParams.get("q") || "";
+  const urlQuery = searchParams.get("q") || "";
   const initialUserId = searchParams.get("userId") || "";
-  const hasAutoSearched = useRef(false);
 
-  const [query, setQuery] = useState(initialQuery);
+  const [query, setQuery] = useState(urlQuery);
   const [state, setState] = useState<SearchState>({ status: "idle" });
+  const abortRef = useRef<AbortController | null>(null);
 
   const performSearch = useCallback(
     async (q: string, page = 1, append = false) => {
@@ -34,55 +42,73 @@ export default function SearchPage() {
         return;
       }
 
-      if (append && state.status === "results") {
-        setState({ ...state, loadingMore: true });
-      } else {
-        setState({ status: "loading" });
-      }
+      // Abort any in-flight request so a slow earlier search can't
+      // overwrite the results of a newer one.
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      setState((prev) =>
+        append && prev.status === "results"
+          ? { ...prev, loadingMore: true }
+          : { status: "loading" }
+      );
 
       try {
-        const result = await searchVods({ query: q || undefined, userId: initialUserId || undefined, page, limit: PAGE_SIZE });
-
-        if (result.vods.length === 0 && !append) {
-          setState({ status: "empty", query: q });
-          return;
-        }
-
-        if (append && state.status === "results") {
-          setState({
-            status: "results",
-            vods: [...state.vods, ...result.vods],
-            totalCount: result.totalCount,
+        const result = await searchVods(
+          {
+            query: q || undefined,
+            userId: initialUserId || undefined,
             page,
-            loadingMore: false,
-          });
-        } else {
-          setState({
+            limit: PAGE_SIZE,
+          },
+          { signal: controller.signal }
+        );
+
+        setState((prev) => {
+          if (append && prev.status === "results") {
+            return {
+              status: "results",
+              query: q,
+              vods: [...prev.vods, ...result.vods],
+              totalCount: result.totalCount,
+              page,
+              loadingMore: false,
+            };
+          }
+          if (result.vods.length === 0) {
+            return { status: "empty", query: q };
+          }
+          return {
             status: "results",
+            query: q,
             vods: result.vods,
             totalCount: result.totalCount,
             page,
             loadingMore: false,
-          });
-        }
-      } catch {
-        if (append && state.status === "results") {
-          setState({ ...state, loadingMore: false });
-        } else {
-          				setState({ status: "error", query: q });
-          			}
-          		}
-          	},
-          	[state, initialUserId]
-          );
+          };
+        });
+      } catch (err) {
+        // An aborted request means a newer search took over — ignore it.
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setState((prev) =>
+          append && prev.status === "results"
+            ? { ...prev, loadingMore: false }
+            : { status: "error", query: q }
+        );
+      }
+    },
+    [initialUserId]
+  );
 
-  // Auto-search on initial load if ?q= or ?userId= is present
+  // Search whenever the URL query changes (initial load AND client-side
+  // navigation like /search?q=a → /search?q=b).
   useEffect(() => {
-    if ((initialQuery || initialUserId) && !hasAutoSearched.current) {
-      hasAutoSearched.current = true;
-      performSearch(initialQuery);
-    }
-  }, [initialQuery, initialUserId, performSearch]);
+    if (!urlQuery && !initialUserId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync the input with the URL-driven search
+    setQuery(urlQuery);
+    performSearch(urlQuery);
+  }, [urlQuery, initialUserId, performSearch]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,7 +117,9 @@ export default function SearchPage() {
 
   const handleLoadMore = () => {
     if (state.status === "results") {
-      performSearch(query, state.page + 1, true);
+      // Use the query that produced the current results — the input box
+      // may have been edited without submitting.
+      performSearch(state.query, state.page + 1, true);
     }
   };
 
@@ -232,5 +260,16 @@ export default function SearchPage() {
         </>
       )}
     </main>
+  );
+}
+
+// useSearchParams requires a Suspense boundary during static generation.
+export default function SearchPage() {
+  return (
+    <Suspense
+      fallback={<main className="flex-1 w-full max-w-7xl mx-auto px-6 py-8" />}
+    >
+      <SearchContent />
+    </Suspense>
   );
 }

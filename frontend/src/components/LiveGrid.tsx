@@ -1,7 +1,8 @@
 "use client";
 // Client Component — uses useState for grid/list toggle, useSearchParams for sort
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, Suspense } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LiveStreamCard } from "./LiveStreamCard";
 import type { LiveStream } from "@/types";
@@ -14,7 +15,17 @@ interface LiveGridProps {
 type ViewMode = "grid" | "list";
 type SortMode = "viewers" | "recent";
 
-export function LiveGrid({ streams, total }: LiveGridProps) {
+// useSearchParams requires a Suspense boundary during static generation,
+// so the exported component wraps the inner implementation.
+export function LiveGrid(props: LiveGridProps) {
+  return (
+    <Suspense fallback={<section aria-label="Live streams" />}>
+      <LiveGridContent {...props} />
+    </Suspense>
+  );
+}
+
+function LiveGridContent({ streams, total }: LiveGridProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
@@ -69,13 +80,13 @@ export function LiveGrid({ streams, total }: LiveGridProps) {
           <p className="mt-2 text-sm text-[var(--color-text-muted)]">
             Check out past streams below
           </p>
-          <a
+          <Link
             href="/search"
             className="mt-4 inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:opacity-90"
             style={{ backgroundColor: "var(--color-primary)" }}
           >
             Browse past streams
-          </a>
+          </Link>
         </div>
       </section>
     );

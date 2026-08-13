@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8081";
+// SRS HTTP server (HLS playlists/segments). Separate from the API backend.
+const HLS_URL = process.env.HLS_URL || "http://localhost:8080";
 
 const nextConfig: NextConfig = {
   /* config options here */
@@ -13,11 +15,11 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/hls/:path*",
-        destination: `http://localhost:8080/:path*`,
+        destination: `${HLS_URL}/:path*`,
       },
       {
         source: "/live/:path*",
-        destination: `http://localhost:8080/live/:path*`,
+        destination: `${HLS_URL}/live/:path*`,
       },
     ];
   },

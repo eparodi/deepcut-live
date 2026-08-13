@@ -90,6 +90,9 @@ func (r *ChatRepo) GetMessages(ctx context.Context, streamID string, before stri
 		}
 		msgs = append(msgs, m)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, false, fmt.Errorf("iterate chat messages: %w", err)
+	}
 
 	hasMore := len(msgs) > limit
 	if hasMore {

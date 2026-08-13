@@ -139,9 +139,9 @@ func (h *ChatHub) AllowMessage(userID string) bool {
 
 // Broadcast sends a message to all clients in a stream's room using the spec envelope format.
 func (h *ChatHub) Broadcast(streamID string, msg *domain.ChatMessage) {
-	envelope := map[string]interface{}{
+	envelope := map[string]any{
 		"type": "message",
-		"payload": map[string]interface{}{
+		"payload": map[string]any{
 			"id":            msg.ID,
 			"userId":        msg.UserID,
 			"userName":      msg.UserName,
@@ -173,7 +173,7 @@ func (h *ChatHub) Broadcast(streamID string, msg *domain.ChatMessage) {
 }
 
 // SendToClient sends a JSON message to a specific client.
-func (h *ChatHub) SendToClient(client *domain.ChatClient, msg interface{}) {
+func (h *ChatHub) SendToClient(client *domain.ChatClient, msg any) {
 	data, err := json.Marshal(msg)
 	if err != nil {
 		h.logger.Error("marshal client message", "error", err)

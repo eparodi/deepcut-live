@@ -12,9 +12,13 @@ vi.mock("next/headers", () => ({
   cookies: vi.fn(),
 }));
 
-vi.mock("@/lib/api", () => ({
-  getChannel: vi.fn(),
-}));
+vi.mock("@/lib/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api")>();
+  return {
+    ...actual,
+    getChannel: vi.fn(),
+  };
+});
 
 // Mock hls.js (required by VideoPlayer which is rendered inside ChannelPage)
 vi.mock("hls.js", () => {
@@ -45,7 +49,7 @@ vi.mock("hls.js", () => {
 Element.prototype.scrollIntoView = vi.fn();
 
 import { cookies } from "next/headers";
-import { getChannel } from "@/lib/api";
+import { ApiError, getChannel } from "@/lib/api";
 import ChannelPage from "./page";
 import type { ChannelResponse } from "@/types";
 
@@ -112,11 +116,9 @@ describe("ChannelPage", () => {
 
   it("calls notFound when channel returns 404", async () => {
     mockTokenCookie(null);
-    const notFoundError = new Error("Not found") as Error & {
-      status: number;
-    };
-    notFoundError.status = 404;
-    vi.mocked(getChannel).mockRejectedValue(notFoundError);
+    vi.mocked(getChannel).mockRejectedValue(
+      new ApiError(404, { error: "channel not found" })
+    );
 
     try {
       await ChannelPage({ params: Promise.resolve({ id: "nonexistent" }) });

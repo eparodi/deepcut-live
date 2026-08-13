@@ -1,6 +1,6 @@
 package application
 
-import "strings"
+import "net/url"
 
 // srsHTTPURL derives the SRS HTTP server base URL from the SRS HTTP API URL.
 // Example: http://srs:1985 (API) → http://srs:8080 (HTTP/HLS server).
@@ -10,8 +10,10 @@ func srsHTTPURL(srsAPIURL string) string {
 	if srsAPIURL == "" {
 		return fallback
 	}
-	if httpURL := strings.Replace(srsAPIURL, ":1985", ":8080", 1); httpURL != srsAPIURL {
-		return httpURL
+	u, err := url.Parse(srsAPIURL)
+	if err != nil || u.Host == "" {
+		return fallback
 	}
-	return srsAPIURL + ":8080"
+	u.Host = u.Hostname() + ":8080"
+	return u.String()
 }

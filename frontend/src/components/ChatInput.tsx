@@ -1,7 +1,7 @@
 "use client";
-// Client Component — needs useState for input, event handlers, useRef for focus
+// Client Component — needs useState for input and event handlers
 
-import { useState, useRef, useCallback, type KeyboardEvent } from "react";
+import { useState, useCallback, type KeyboardEvent } from "react";
 
 interface ChatInputProps {
   /** Whether the user is signed in */
@@ -30,11 +30,12 @@ export function ChatInput({
   onSend,
 }: ChatInputProps) {
   const [message, setMessage] = useState("");
-  const [charCount, setCharCount] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const MAX_CHARS = 500;
   const SHOW_COUNTER_AT = 400;
+
+  // Derived, not state — always in sync with the input value.
+  const charCount = message.length;
 
   const handleSend = useCallback(() => {
     const trimmed = message.trim();
@@ -47,7 +48,6 @@ export function ChatInput({
 
     onSend(trimmed);
     setMessage("");
-    setCharCount(0);
   }, [
     message,
     isSignedIn,
@@ -67,15 +67,11 @@ export function ChatInput({
     [handleSend]
   );
 
-  const handleChange = useCallback(
-    (value: string) => {
-      if (value.length <= MAX_CHARS) {
-        setMessage(value);
-        setCharCount(value.length);
-      }
-    },
-    []
-  );
+  const handleChange = useCallback((value: string) => {
+    if (value.length <= MAX_CHARS) {
+      setMessage(value);
+    }
+  }, []);
 
   const isDisabled =
     !isSignedIn || isReconnecting || isStreamEnded || isRateLimited;
@@ -141,7 +137,6 @@ export function ChatInput({
       <div className="flex items-center gap-2">
         <div className="flex-1 relative">
           <input
-            ref={inputRef}
             type="text"
             value={message}
             onChange={(e) => handleChange(e.target.value)}

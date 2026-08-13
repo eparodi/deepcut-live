@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
@@ -40,7 +41,7 @@ func (r *VODRepo) GetVOD(ctx context.Context, vodID string) (*domain.VOD, error)
 		&vod.VodHlsPath, &vod.VodThumbnailPath, &vod.RecordingError,
 		&vod.CreatedAt,
 	)
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, errs.NotFound("vod %s not found", vodID)
 	}
 	if err != nil {

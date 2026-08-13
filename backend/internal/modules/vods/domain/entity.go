@@ -2,6 +2,18 @@ package domain
 
 import "time"
 
+// RecordingStatus enumerates the lifecycle states of a VOD recording.
+// Values mirror the streams module's recording_status column; the modules
+// each define their own constants to stay dependency-free.
+type RecordingStatus string
+
+const (
+	RecordingStatusPending    RecordingStatus = "pending"
+	RecordingStatusProcessing RecordingStatus = "processing"
+	RecordingStatusReady      RecordingStatus = "ready"
+	RecordingStatusFailed     RecordingStatus = "failed"
+)
+
 // VOD represents a past stream available for on-demand viewing.
 type VOD struct {
 	ID               string     `json:"id"`

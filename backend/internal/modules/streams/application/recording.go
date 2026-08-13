@@ -7,12 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sync"
 	"time"
 )
-
-// streamRecordings tracks active ffmpeg recording goroutines by stream ID.
-var streamRecordings sync.Map // map[string]context.CancelFunc
 
 // startRecording begins recording the HLS stream to an MPEG-TS file.
 // Called from OnStreamStart. Stops when cancelled via stopRecording.
@@ -25,15 +21,20 @@ var streamRecordings sync.Map // map[string]context.CancelFunc
 // missing").
 func (s *StreamService) startRecording(streamID, streamKey string) string {
 	ctx, cancel := context.WithCancel(context.Background())
-	streamRecordings.Store(streamID, cancel)
+	s.streamRecordings.Store(streamID, cancel)
 
 	recordingPath := filepath.Join("/data/recordings", streamID+".ts")
-	os.MkdirAll(filepath.Dir(recordingPath), 0o755) // best-effort, may fail in test
+	if err := os.MkdirAll(filepath.Dir(recordingPath), 0o755); err != nil {
+		// Best-effort (fails outside the container, e.g. in tests): ffmpeg
+		// will fail below and keep retrying until the stream ends.
+		s.warnLog("vod recording: mkdir failed", "err", err, "stream_id", streamID)
+	}
 
 	hlsURL := fmt.Sprintf("%s/live/%s.m3u8", srsHTTPURL(s.srsAPIURL), streamKey)
 
 	go func() {
-		defer streamRecordings.Delete(streamID)
+		defer s.streamRecordings.Delete(streamID)
+		defer cancel() // release the context if we exit for any other reason
 
 		// Retry loop: ffmpeg may exit if the HLS playlist isn't ready yet.
 		// Restart until the stream ends (context cancelled).
@@ -58,7 +59,11 @@ func (s *StreamService) startRecording(streamID, streamKey string) string {
 			if err != nil {
 				s.warnLog("vod recording attempt failed, retrying",
 					"err", err, "stream_id", streamID, "ffmpeg_stderr", tail(stderr.String(), 500))
-				time.Sleep(2 * time.Second)
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(2 * time.Second):
+				}
 			}
 		}
 	}()
@@ -76,9 +81,10 @@ func tail(s string, n int) string {
 }
 
 // stopRecording stops the ffmpeg recording goroutine for a stream.
-// Returns the recording path that was being written to.
 func (s *StreamService) stopRecording(streamID string) {
-	if cancel, ok := streamRecordings.Load(streamID); ok {
-		cancel.(context.CancelFunc)()
+	if stored, ok := s.streamRecordings.Load(streamID); ok {
+		if cancel, ok := stored.(context.CancelFunc); ok {
+			cancel()
+		}
 	}
 }

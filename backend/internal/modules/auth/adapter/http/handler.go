@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -120,7 +121,13 @@ func WithUserID(ctx context.Context, userID string) context.Context {
 // GoogleOAuth redirects the user to Google's OAuth consent page.
 func (h *AuthHandler) GoogleOAuth(w http.ResponseWriter, r *http.Request) {
 	b := make([]byte, 16)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		// Without random bytes the state token is predictable and CSRF
+		// protection is void — refuse to start the flow.
+		h.logger.Error("generate oauth state", "error", err)
+		render.Error(w, r, fmt.Errorf("generate oauth state: %w", err))
+		return
+	}
 	state := hex.EncodeToString(b)
 
 	http.SetCookie(w, &http.Cookie{
@@ -175,7 +182,14 @@ func (h *AuthHandler) GoogleOAuthCallback(w http.ResponseWriter, r *http.Request
 
 	user, err := h.svc.GetByGoogleID(r.Context(), googleUser.ID)
 	if err != nil {
-		// Create new user if not found
+		// Only create a new user when the lookup reports NotFound — any
+		// other failure (DB down, timeout) must not trigger a create.
+		var appErr *errs.AppError
+		if !errors.As(err, &appErr) || appErr.Kind != errs.KindNotFound {
+			h.logger.Error("get user by google id", "error", err)
+			render.Error(w, r, fmt.Errorf("get user: %w", err))
+			return
+		}
 		user, err = h.svc.CreateUser(r.Context(), googleUser.ID, googleUser.Email, googleUser.Name, googleUser.Picture)
 		if err != nil {
 			h.logger.Error("create user", "error", err)

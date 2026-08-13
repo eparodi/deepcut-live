@@ -142,9 +142,3 @@ export interface SearchResponse {
   limit: number;
   offset: number;
 }
-
-/** API error response */
-export interface ApiError {
-  error: string;
-  message?: string;
-}

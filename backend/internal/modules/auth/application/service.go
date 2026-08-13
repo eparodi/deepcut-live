@@ -29,28 +29,25 @@ type GoogleUserInfo struct {
 
 type AuthService struct {
 	repo        domain.Repository
-	oauthConfig *oauth2.Config
 	privateKey  *ecdsa.PrivateKey
 	publicKey   *ecdsa.PublicKey
-	baseURL     string
 	googleCfg   oauth2.Config
 	userInfoURL string
 }
 
-func NewAuthService(repo domain.Repository, googleClientID, googleClientSecret, baseURL, privateKeyPEM, publicKeyPEM string) *AuthService {
+func NewAuthService(repo domain.Repository, googleClientID, googleClientSecret, baseURL, privateKeyPEM, publicKeyPEM string) (*AuthService, error) {
 	priv, err := jwt.ParseECPrivateKeyFromPEM([]byte(privateKeyPEM))
 	if err != nil {
-		panic(fmt.Sprintf("failed to parse private key: %v", err))
+		return nil, fmt.Errorf("parse private key: %w", err)
 	}
 	pub, err := jwt.ParseECPublicKeyFromPEM([]byte(publicKeyPEM))
 	if err != nil {
-		panic(fmt.Sprintf("failed to parse public key: %v", err))
+		return nil, fmt.Errorf("parse public key: %w", err)
 	}
 	return &AuthService{
 		repo:        repo,
 		privateKey:  priv,
 		publicKey:   pub,
-		baseURL:     baseURL,
 		userInfoURL: "https://www.googleapis.com/oauth2/v2/userinfo",
 		googleCfg: oauth2.Config{
 			ClientID:     googleClientID,
@@ -62,7 +59,7 @@ func NewAuthService(repo domain.Repository, googleClientID, googleClientSecret, 
 			},
 			Endpoint: google.Endpoint,
 		},
-	}
+	}, nil
 }
 
 // GenerateOAuthURL returns the Google OAuth consent page URL.

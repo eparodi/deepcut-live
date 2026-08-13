@@ -16,18 +16,22 @@ import (
 	"github.com/deepcut/live/internal/shared/errs"
 )
 
-// recordingPaths tracks the recording file path for each active stream.
-var recordingPaths sync.Map // map[string]string (streamID → path)
-
 type StreamService struct {
-	repo      domain.StreamRepository
-	authRepo  domain.AuthRepo
-	hub       *StreamHub
-	vodQueue  voddomain.VODQueue
-	srsSecret string
-	srsAPIURL string
-	http      *http.Client
-	logger    *slog.Logger
+	repo       domain.StreamRepository
+	authRepo   domain.AuthRepo
+	hub        *StreamHub
+	vodQueue   voddomain.VODQueue
+	srsSecret  string
+	srsAPIURL  string
+	httpClient *http.Client
+	logger     *slog.Logger
+
+	// recordingPaths tracks the recording file path for each active stream (streamID → path).
+	recordingPaths sync.Map
+	// liveThumbnails tracks active thumbnail capture goroutines (streamID → context.CancelFunc).
+	liveThumbnails sync.Map
+	// streamRecordings tracks active ffmpeg recording goroutines (streamID → context.CancelFunc).
+	streamRecordings sync.Map
 }
 
 func NewStreamService(repo domain.StreamRepository, authRepo domain.AuthRepo, hub *StreamHub, vodQueue voddomain.VODQueue, srsSecret, srsAPIURL string, logger *slog.Logger) *StreamService {
@@ -38,7 +42,7 @@ func NewStreamService(repo domain.StreamRepository, authRepo domain.AuthRepo, hu
 		vodQueue:  vodQueue,
 		srsSecret: srsSecret,
 		srsAPIURL: srsAPIURL,
-		http: &http.Client{
+		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
 		},
 		logger: logger,
@@ -100,7 +104,7 @@ func (s *StreamService) OnStreamStart(ctx context.Context, rawKey string, srsCli
 	}
 
 	s.startLiveThumbnail(stream.ID, rawKey)
-	recordingPaths.Store(stream.ID, s.startRecording(stream.ID, rawKey))
+	s.recordingPaths.Store(stream.ID, s.startRecording(stream.ID, rawKey))
 
 	return stream, nil
 }
@@ -132,20 +136,16 @@ func (s *StreamService) OnStreamEnd(ctx context.Context, srsClientID string, hls
 		s.hub.NotifyStreamEnded(stream.UserID)
 	}
 
-	s.stopLiveThumbnail(stream.ID)
-	s.stopRecording(stream.ID)
-
-	// Use ffmpeg recording path over SRS callback path
+	// Use the ffmpeg recording path captured at start over the SRS callback path.
 	recPath := recordingPath
-	if stored, ok := recordingPaths.Load(stream.ID); ok {
-		recPath = stored.(string)
-		recordingPaths.Delete(stream.ID)
+	if stored := s.stopStreamSideEffects(stream.ID); stored != "" {
+		recPath = stored
 	}
 
 	// Update analytics
 	date := time.Now().Format("2006-01-02")
 	if err := s.repo.UpdateStreamAnalytics(ctx, stream.UserID, date, duration, stream.PeakViewers, stream.TotalViewers); err != nil {
-		slog.Error("failed to update stream analytics", "err", err, "stream_id", stream.ID)
+		s.errorLog("failed to update stream analytics", "err", err, "stream_id", stream.ID)
 	}
 
 	// Set recording status and enqueue VOD processing job
@@ -154,22 +154,42 @@ func (s *StreamService) OnStreamEnd(ctx context.Context, srsClientID string, hls
 	return nil
 }
 
+// stopStreamSideEffects stops the live-thumbnail and recording goroutines for
+// a stream and returns the recording path captured at stream start, if any.
+// Every end-of-stream path (callback, poller, force-end, interrupt) must call
+// this so no capture goroutine outlives its stream.
+func (s *StreamService) stopStreamSideEffects(streamID string) string {
+	s.stopLiveThumbnail(streamID)
+	s.stopRecording(streamID)
+
+	stored, ok := s.recordingPaths.LoadAndDelete(streamID)
+	if !ok {
+		return ""
+	}
+	path, ok := stored.(string)
+	if !ok {
+		s.warnLog("unexpected recording path entry type", "stream_id", streamID)
+		return ""
+	}
+	return path
+}
+
 // handleRecording sets the recording status and enqueues a VOD processing job.
 func (s *StreamService) handleRecording(ctx context.Context, streamID, recordingPath string) {
 	if recordingPath == "" {
-		if err := s.repo.UpdateRecordingStatus(ctx, streamID, "failed", "No recording available"); err != nil {
-			slog.Error("update recording status failed", "err", err, "stream_id", streamID)
+		if err := s.repo.UpdateRecordingStatus(ctx, streamID, string(domain.RecordingStatusFailed), "No recording available"); err != nil {
+			s.errorLog("update recording status failed", "err", err, "stream_id", streamID)
 		}
 		return
 	}
 
-	if err := s.repo.UpdateRecordingStatus(ctx, streamID, "processing", ""); err != nil {
-		slog.Error("update recording status to processing failed", "err", err, "stream_id", streamID)
+	if err := s.repo.UpdateRecordingStatus(ctx, streamID, string(domain.RecordingStatusProcessing), ""); err != nil {
+		s.errorLog("update recording status to processing failed", "err", err, "stream_id", streamID)
 		return
 	}
 
 	if s.vodQueue == nil {
-		slog.Warn("vod queue not configured, skipping job enqueue", "stream_id", streamID)
+		s.warnLog("vod queue not configured, skipping job enqueue", "stream_id", streamID)
 		return
 	}
 
@@ -178,7 +198,7 @@ func (s *StreamService) handleRecording(ctx context.Context, streamID, recording
 		RecordingPath: recordingPath,
 	}
 	if err := s.vodQueue.Enqueue(ctx, args); err != nil {
-		slog.Error("enqueue vod processing failed", "err", err, "stream_id", streamID)
+		s.errorLog("enqueue vod processing failed", "err", err, "stream_id", streamID)
 		// Don't fail the whole on_unpublish — the recording exists on disk.
 	}
 }
@@ -189,7 +209,7 @@ func (s *StreamService) OnStreamInterrupted(ctx context.Context, srsClientID str
 	if err != nil {
 		return fmt.Errorf("on stream interrupted: %w", err)
 	}
-	if err := s.repo.UpdateStreamStatus(ctx, stream.ID, "interrupted"); err != nil {
+	if err := s.repo.UpdateStreamStatus(ctx, stream.ID, string(domain.StreamStatusInterrupted)); err != nil {
 		return fmt.Errorf("update stream status: %w", err)
 	}
 	if err := s.authRepo.SetLiveStatus(ctx, stream.UserID, false); err != nil {
@@ -197,9 +217,8 @@ func (s *StreamService) OnStreamInterrupted(ctx context.Context, srsClientID str
 	}
 	if s.hub != nil {
 		s.hub.NotifyStreamEnded(stream.UserID)
-
-		s.stopLiveThumbnail(stream.ID)
 	}
+	s.stopStreamSideEffects(stream.ID)
 	return nil
 }
 
@@ -221,12 +240,19 @@ func (s *StreamService) GetChannelInfo(ctx context.Context, userID string) (*dom
 	return info, nil
 }
 
-// HeartbeatViewer records a viewer heartbeat.
+// HeartbeatViewer records a viewer heartbeat, registering the viewer first
+// when this is their initial heartbeat for the stream.
 func (s *StreamService) HeartbeatViewer(ctx context.Context, streamID, userID, clientID string) error {
-	if err := s.repo.HeartbeatViewer(ctx, streamID, clientID, time.Now()); err != nil {
-		if err := s.repo.UpsertViewer(ctx, streamID, userID, clientID); err != nil {
-			return fmt.Errorf("upsert viewer: %w", err)
-		}
+	err := s.repo.HeartbeatViewer(ctx, streamID, clientID, time.Now())
+	if err == nil {
+		return nil
+	}
+	var appErr *errs.AppError
+	if !errors.As(err, &appErr) || appErr.Kind != errs.KindNotFound {
+		return fmt.Errorf("heartbeat viewer: %w", err)
+	}
+	if err := s.repo.UpsertViewer(ctx, streamID, userID, clientID); err != nil {
+		return fmt.Errorf("upsert viewer: %w", err)
 	}
 	return nil
 }
@@ -264,7 +290,7 @@ func (s *StreamService) ForceEndStream(ctx context.Context, userID string) (stri
 	srsFailed := false
 	if stream.SRSClientID != nil && s.srsAPIURL != "" {
 		if err := s.disconnectSRSClient(ctx, *stream.SRSClientID); err != nil {
-			slog.Warn("failed to disconnect SRS publisher", "err", err, "user_id", userID, "srs_client_id", *stream.SRSClientID)
+			s.warnLog("failed to disconnect SRS publisher", "err", err, "user_id", userID, "srs_client_id", *stream.SRSClientID)
 			srsFailed = true
 		}
 	}
@@ -285,11 +311,11 @@ func (s *StreamService) ForceEndStream(ctx context.Context, userID string) (stri
 	// Update analytics (same pattern as OnStreamEnd).
 	date := time.Now().Format("2006-01-02")
 	if err := s.repo.UpdateStreamAnalytics(ctx, userID, date, duration, stream.PeakViewers, stream.TotalViewers); err != nil {
-		slog.Error("failed to update stream analytics", "err", err, "user_id", userID)
+		s.errorLog("failed to update stream analytics", "err", err, "user_id", userID)
 	}
 
-	// Force-end has no recording path from SRS
-	s.handleRecording(ctx, stream.ID, "")
+	// SRS sends no recording path on force-end; use the one captured at start.
+	s.handleRecording(ctx, stream.ID, s.stopStreamSideEffects(stream.ID))
 
 	if srsFailed {
 		return "Stream ended (publisher disconnect may have failed)", nil
@@ -305,7 +331,7 @@ func (s *StreamService) disconnectSRSClient(ctx context.Context, clientID string
 		return fmt.Errorf("build srs request: %w", err)
 	}
 
-	resp, err := s.http.Do(req)
+	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("srs call: %w", err)
 	}
