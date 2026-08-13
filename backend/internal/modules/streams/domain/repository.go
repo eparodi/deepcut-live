@@ -7,7 +7,11 @@ import (
 
 type StreamRepository interface {
 	CreateStream(ctx context.Context, userID string, title *string, srsClientID string, hlsPath string) (*Stream, error)
-	EndStream(ctx context.Context, streamID string, hlsPath, recordingPath string, durationSeconds int) error
+	// EndStreamIfLive ends a stream only if it is currently live. It returns
+	// false (with nil error) when the stream was already ended — the caller
+	// uses this as an idempotency guard so concurrent end paths (SRS callback,
+	// poller, force-end) don't double-process the stream.
+	EndStreamIfLive(ctx context.Context, streamID string, hlsPath, recordingPath string, durationSeconds int) (bool, error)
 	UpdateStreamStatus(ctx context.Context, streamID, status string) error
 	UpdateRecordingStatus(ctx context.Context, streamID, status, errorMsg string) error
 	UpdateVODPaths(ctx context.Context, streamID, hlsPath, thumbnailPath string) error

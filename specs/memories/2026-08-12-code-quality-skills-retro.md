@@ -82,3 +82,25 @@ out of the skills.
   (generic 500 bodies), so the pre-render log is the only evidence —
   that's handle-once plus observability, not double handling. Encoded
   as an explicit exception in the go-chi skill.
+
+## Post-review correction — idempotent stream finalize (round 2)
+
+Self-review found a real flaw in the shipped fix: force-end consumed
+`stopStreamSideEffects` (deleting the recording-path map entry) AND
+enqueued the VOD, but the SRS `on_unpublish` callback that fires after
+a successful disconnect runs a second, non-idempotent pass —
+double-counting analytics (the upsert ADDs duration) and overwriting
+`recording_status` to "failed" right after force-end enqueued it.
+
+Fix: all three end paths (callback, poller, force-end) now route through
+one `finalizeStream`, which uses a new repository CAS
+(`EndStreamIfLive` — `UPDATE ... WHERE status='live'`, returning
+`RowsAffected() > 0`). Only the path that actually wins the transition
+performs notifications, analytics, and recording handoff; losers no-op.
+Poller-ended streams also gain a real duration (previously 0).
+
+New tests: repo idempotency test (second call reports already-ended) and
+a service regression test asserting the loser performs zero follow-up
+writes. New skill rule in go-chi: "when multiple paths can end the same
+entity, the completion itself must be idempotent — shared cleanup is not
+enough" (CAS pattern + loser-no-op test requirement).

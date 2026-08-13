@@ -41,19 +41,23 @@ func (r *StreamRepo) CreateStream(ctx context.Context, userID string, title *str
 	return &s, nil
 }
 
-func (r *StreamRepo) EndStream(ctx context.Context, streamID string, hlsPath, recordingPath string, durationSeconds int) error {
-	_, err := r.pool.Exec(ctx, `
+// EndStreamIfLive transitions a live stream to offline and records the
+// end-of-stream metadata. It is a compare-and-swap on status = 'live': it
+// returns false when no live row matched, so concurrent end paths can
+// detect that another path already finalized the stream.
+func (r *StreamRepo) EndStreamIfLive(ctx context.Context, streamID string, hlsPath, recordingPath string, durationSeconds int) (bool, error) {
+	cmd, err := r.pool.Exec(ctx, `
 		UPDATE streams
 		SET ended_at = now(), status = 'offline',
 		    hls_path = $2, recording_path = $3,
 		    duration_seconds = $4
-		WHERE id = $1`,
+		WHERE id = $1 AND status = 'live'`,
 		streamID, hlsPath, recordingPath, durationSeconds,
 	)
 	if err != nil {
-		return fmt.Errorf("end stream: %w", err)
+		return false, fmt.Errorf("end stream: %w", err)
 	}
-	return nil
+	return cmd.RowsAffected() > 0, nil
 }
 
 func (r *StreamRepo) UpdateStreamStatus(ctx context.Context, streamID, status string) error {

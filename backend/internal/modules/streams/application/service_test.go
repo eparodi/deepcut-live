@@ -18,7 +18,7 @@ import (
 
 type mockStreamRepo struct {
 	createStreamFn           func(ctx context.Context, userID string, title *string, srsClientID string, hlsPath string) (*domain.Stream, error)
-	endStreamFn              func(ctx context.Context, streamID string, hlsPath, recordingPath string, durationSeconds int) error
+	endStreamIfLiveFn        func(ctx context.Context, streamID string, hlsPath, recordingPath string, durationSeconds int) (bool, error)
 	updateStreamStatusFn     func(ctx context.Context, streamID, status string) error
 	getStreamByUserIDFn      func(ctx context.Context, userID string) (*domain.Stream, error)
 	getStreamBySRSClientIDFn func(ctx context.Context, srsClientID string) (*domain.Stream, error)
@@ -48,11 +48,11 @@ func (m *mockStreamRepo) CreateStream(ctx context.Context, userID string, title 
 	}, nil
 }
 
-func (m *mockStreamRepo) EndStream(ctx context.Context, streamID string, hlsPath, recordingPath string, durationSeconds int) error {
-	if m.endStreamFn != nil {
-		return m.endStreamFn(ctx, streamID, hlsPath, recordingPath, durationSeconds)
+func (m *mockStreamRepo) EndStreamIfLive(ctx context.Context, streamID string, hlsPath, recordingPath string, durationSeconds int) (bool, error) {
+	if m.endStreamIfLiveFn != nil {
+		return m.endStreamIfLiveFn(ctx, streamID, hlsPath, recordingPath, durationSeconds)
 	}
-	return nil
+	return true, nil
 }
 
 func (m *mockStreamRepo) UpdateStreamStatus(ctx context.Context, streamID, status string) error {
@@ -404,11 +404,20 @@ func TestOnStreamEnd(t *testing.T) {
 		{
 			name: "error — end stream fails",
 			setupMock: func(auth *mockStreamAuthRepo, stream *mockStreamRepo) {
-				stream.endStreamFn = func(ctx context.Context, streamID, hlsPath, recordingPath string, durationSeconds int) error {
-					return errors.New("end failed")
+				stream.endStreamIfLiveFn = func(ctx context.Context, streamID, hlsPath, recordingPath string, durationSeconds int) (bool, error) {
+					return false, errors.New("end failed")
 				}
 			},
 			wantErr: true,
+		},
+		{
+			name: "already ended — finalize is a no-op, no error",
+			setupMock: func(auth *mockStreamAuthRepo, stream *mockStreamRepo) {
+				stream.endStreamIfLiveFn = func(ctx context.Context, streamID, hlsPath, recordingPath string, durationSeconds int) (bool, error) {
+					return false, nil
+				}
+			},
+			wantErr: false,
 		},
 		{
 			name: "error — set live status fails",
@@ -795,11 +804,21 @@ func TestForceEndStream(t *testing.T) {
 			name:   "error — end stream fails",
 			userID: "user-1",
 			setupMock: func(auth *mockStreamAuthRepo, stream *mockStreamRepo) {
-				stream.endStreamFn = func(ctx context.Context, streamID, hlsPath, recordingPath string, durationSeconds int) error {
-					return errors.New("end failed")
+				stream.endStreamIfLiveFn = func(ctx context.Context, streamID, hlsPath, recordingPath string, durationSeconds int) (bool, error) {
+					return false, errors.New("end failed")
 				}
 			},
 			wantErr: true,
+		},
+		{
+			name:   "already ended — force-end becomes a no-op success",
+			userID: "user-1",
+			setupMock: func(auth *mockStreamAuthRepo, stream *mockStreamRepo) {
+				stream.endStreamIfLiveFn = func(ctx context.Context, streamID, hlsPath, recordingPath string, durationSeconds int) (bool, error) {
+					return false, nil
+				}
+			},
+			wantErr: false,
 		},
 		{
 			name:   "error — set live status fails",
@@ -864,4 +883,56 @@ func (q *testNilQueue) Enqueue(ctx context.Context, args voddomain.VODProcessArg
 		return fmt.Errorf("queue not initialized")
 	}
 	return nil
+}
+
+// ---------------------------------------------------------------------------
+// TestFinalizeStream_SkipsFollowupWhenAlreadyEnded — regression: when the
+// SRS on_unpublish callback races a force-end (or the poller), the losing
+// path must NOT double-count analytics, overwrite the recording status to
+// "failed", or re-notify. Only the path that actually transitions the
+// stream to offline does the follow-up work.
+// ---------------------------------------------------------------------------
+
+func TestFinalizeStream_SkipsFollowupWhenAlreadyEnded(t *testing.T) {
+	var analyticsCalls, recordingCalls, liveStatusCalls int
+
+	authRepo := &mockStreamAuthRepo{
+		setLiveStatusFn: func(ctx context.Context, userID string, isLive bool) error {
+			liveStatusCalls++
+			return nil
+		},
+	}
+	streamRepo := &mockStreamRepo{
+		endStreamIfLiveFn: func(ctx context.Context, streamID, hlsPath, recordingPath string, durationSeconds int) (bool, error) {
+			return false, nil // another path already ended it
+		},
+		updateStreamAnalyticsFn: func(ctx context.Context, userID, date string, duration, peak, unique int) error {
+			analyticsCalls++
+			return nil
+		},
+		updateRecordingStatusFn: func(ctx context.Context, streamID, status, errorMsg string) error {
+			recordingCalls++
+			return nil
+		},
+	}
+	svc := NewStreamService(streamRepo, authRepo, nil, nil, "secret", "", nil)
+
+	stream := &domain.Stream{
+		ID:        "stream-1",
+		UserID:    "user-1",
+		StartedAt: time.Now().Add(-10 * time.Minute),
+	}
+	if err := svc.finalizeStream(context.Background(), stream, "", "", 0); err != nil {
+		t.Fatalf("finalizeStream: %v", err)
+	}
+
+	if analyticsCalls != 0 {
+		t.Errorf("UpdateStreamAnalytics called %d times, want 0 (double-counting duration)", analyticsCalls)
+	}
+	if recordingCalls != 0 {
+		t.Errorf("UpdateRecordingStatus called %d times, want 0 (would overwrite processing → failed)", recordingCalls)
+	}
+	if liveStatusCalls != 0 {
+		t.Errorf("SetLiveStatus called %d times, want 0", liveStatusCalls)
+	}
 }

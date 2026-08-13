@@ -109,49 +109,15 @@ func (s *StreamService) OnStreamStart(ctx context.Context, rawKey string, srsCli
 	return stream, nil
 }
 
-// OnStreamEnd handles the SRS on_unpublish callback: ends the stream, marks user offline,
-// and enqueues VOD processing if a recording path is available.
+// OnStreamEnd handles the SRS on_unpublish callback. It delegates to
+// finalizeStream, which makes the end idempotent across the callback,
+// poller, and force-end paths.
 func (s *StreamService) OnStreamEnd(ctx context.Context, srsClientID string, hlsPath, recordingPath string, durationSeconds int) error {
 	stream, err := s.repo.GetStreamBySRSClientID(ctx, srsClientID)
 	if err != nil {
 		return fmt.Errorf("on stream end: %w", err)
 	}
-
-	// SRS doesn't send duration in the on_unpublish callback; compute it
-	// from the start time when the caller didn't provide one.
-	duration := durationSeconds
-	if duration <= 0 && !stream.StartedAt.IsZero() {
-		duration = int(time.Since(stream.StartedAt).Seconds())
-	}
-
-	if err := s.repo.EndStream(ctx, stream.ID, hlsPath, recordingPath, duration); err != nil {
-		return fmt.Errorf("end stream: %w", err)
-	}
-
-	if err := s.authRepo.SetLiveStatus(ctx, stream.UserID, false); err != nil {
-		return fmt.Errorf("set live status: %w", err)
-	}
-
-	if s.hub != nil {
-		s.hub.NotifyStreamEnded(stream.UserID)
-	}
-
-	// Use the ffmpeg recording path captured at start over the SRS callback path.
-	recPath := recordingPath
-	if stored := s.stopStreamSideEffects(stream.ID); stored != "" {
-		recPath = stored
-	}
-
-	// Update analytics
-	date := time.Now().Format("2006-01-02")
-	if err := s.repo.UpdateStreamAnalytics(ctx, stream.UserID, date, duration, stream.PeakViewers, stream.TotalViewers); err != nil {
-		s.errorLog("failed to update stream analytics", "err", err, "stream_id", stream.ID)
-	}
-
-	// Set recording status and enqueue VOD processing job
-	s.handleRecording(ctx, stream.ID, recPath)
-
-	return nil
+	return s.finalizeStream(ctx, stream, hlsPath, recordingPath, durationSeconds)
 }
 
 // stopStreamSideEffects stops the live-thumbnail and recording goroutines for
@@ -172,6 +138,53 @@ func (s *StreamService) stopStreamSideEffects(streamID string) string {
 		return ""
 	}
 	return path
+}
+
+// finalizeStream ends a live stream exactly once, no matter which path
+// triggered it (SRS on_unpublish callback, the poller, or a force-end). The
+// repository's EndStreamIfLive acts as a compare-and-swap on status='live', so
+// only the first caller performs the follow-on work. Concurrent or late
+// callers become no-ops — preventing double-counted analytics, duplicate
+// WebSocket notifications, and the recording status being overwritten to
+// "failed" after another path already enqueued it for processing.
+func (s *StreamService) finalizeStream(ctx context.Context, stream *domain.Stream, hlsPath, srsRecordingPath string, durationSeconds int) error {
+	// SRS doesn't send duration in on_unpublish; derive it from start time.
+	duration := durationSeconds
+	if duration <= 0 && !stream.StartedAt.IsZero() {
+		duration = int(time.Since(stream.StartedAt).Seconds())
+	}
+
+	ended, err := s.repo.EndStreamIfLive(ctx, stream.ID, hlsPath, srsRecordingPath, duration)
+	if err != nil {
+		return fmt.Errorf("end stream: %w", err)
+	}
+	if !ended {
+		// Another path already finalized this stream.
+		return nil
+	}
+
+	if err := s.authRepo.SetLiveStatus(ctx, stream.UserID, false); err != nil {
+		return fmt.Errorf("set live status: %w", err)
+	}
+
+	if s.hub != nil {
+		s.hub.NotifyStreamEnded(stream.UserID)
+	}
+
+	// The ffmpeg-captured path (recorded at start) is authoritative over
+	// whatever SRS passed in the callback.
+	recPath := s.stopStreamSideEffects(stream.ID)
+	if recPath == "" {
+		recPath = srsRecordingPath
+	}
+
+	date := time.Now().Format("2006-01-02")
+	if err := s.repo.UpdateStreamAnalytics(ctx, stream.UserID, date, duration, stream.PeakViewers, stream.TotalViewers); err != nil {
+		s.errorLog("failed to update stream analytics", "err", err, "stream_id", stream.ID)
+	}
+
+	s.handleRecording(ctx, stream.ID, recPath)
+	return nil
 }
 
 // handleRecording sets the recording status and enqueues a VOD processing job.
@@ -295,27 +308,13 @@ func (s *StreamService) ForceEndStream(ctx context.Context, userID string) (stri
 		}
 	}
 
-	duration := int(time.Since(stream.StartedAt).Seconds())
-	if err := s.repo.EndStream(ctx, stream.ID, "", "", duration); err != nil {
-		return "", fmt.Errorf("end stream: %w", err)
+	// Force-end has no SRS recording path, but finalizeStream still picks up
+	// the ffmpeg-captured recording and processes it into a VOD. If the SRS
+	// disconnect succeeded and its on_unpublish callback already ended the
+	// stream, finalizeStream's compare-and-swap makes this a no-op.
+	if err := s.finalizeStream(ctx, stream, "", "", 0); err != nil {
+		return "", err
 	}
-
-	if err := s.authRepo.SetLiveStatus(ctx, userID, false); err != nil {
-		return "", fmt.Errorf("set live status: %w", err)
-	}
-
-	if s.hub != nil {
-		s.hub.NotifyStreamEnded(userID)
-	}
-
-	// Update analytics (same pattern as OnStreamEnd).
-	date := time.Now().Format("2006-01-02")
-	if err := s.repo.UpdateStreamAnalytics(ctx, userID, date, duration, stream.PeakViewers, stream.TotalViewers); err != nil {
-		s.errorLog("failed to update stream analytics", "err", err, "user_id", userID)
-	}
-
-	// SRS sends no recording path on force-end; use the one captured at start.
-	s.handleRecording(ctx, stream.ID, s.stopStreamSideEffects(stream.ID))
 
 	if srsFailed {
 		return "Stream ended (publisher disconnect may have failed)", nil

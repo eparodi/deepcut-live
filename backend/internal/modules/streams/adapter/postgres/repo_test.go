@@ -72,7 +72,7 @@ func TestStreamRepo_CreateStream(t *testing.T) {
 	}
 }
 
-func TestStreamRepo_EndStream(t *testing.T) {
+func TestStreamRepo_EndStreamIfLive(t *testing.T) {
 	testutil.SkipOnShort(t)
 	ctx := context.Background()
 	repo := NewStreamRepo(testPool)
@@ -87,9 +87,23 @@ func TestStreamRepo_EndStream(t *testing.T) {
 		t.Fatalf("CreateStream: %v", err)
 	}
 
-	err = repo.EndStream(ctx, stream.ID, "/hls/test.m3u8", "/rec/test.mp4", 3600)
+	ended, err := repo.EndStreamIfLive(ctx, stream.ID, "/hls/test.m3u8", "/rec/test.mp4", 3600)
 	if err != nil {
-		t.Fatalf("EndStream: %v", err)
+		t.Fatalf("EndStreamIfLive: %v", err)
+	}
+	if !ended {
+		t.Fatal("expected first EndStreamIfLive to end a live stream")
+	}
+
+	// A second call must report that the stream was already ended — this is
+	// the idempotency guard that prevents concurrent end paths (callback,
+	// poller, force-end) from double-processing the stream.
+	endedAgain, err := repo.EndStreamIfLive(ctx, stream.ID, "", "", 3600)
+	if err != nil {
+		t.Fatalf("second EndStreamIfLive: %v", err)
+	}
+	if endedAgain {
+		t.Fatal("expected second EndStreamIfLive to report already-ended")
 	}
 
 	// Fetch the stream via ListLiveStreams (should not appear since status is now offline)

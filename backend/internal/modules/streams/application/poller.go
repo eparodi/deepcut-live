@@ -107,16 +107,9 @@ func (s *StreamService) pollSRS(ctx context.Context, seen map[string]bool) {
 			if err == nil {
 				stream, err := s.repo.GetStreamByUserID(ctx, userID)
 				if err == nil {
-					if endErr := s.repo.EndStream(ctx, stream.ID, "", "", 0); endErr != nil {
-						s.errorLog("srs poller: end stream failed", "err", endErr, "stream_id", stream.ID)
+					if err := s.finalizeStream(ctx, stream, "", "", 0); err != nil {
+						s.errorLog("srs poller: end stream failed", "err", err, "stream_id", stream.ID)
 					}
-					if statusErr := s.authRepo.SetLiveStatus(ctx, userID, false); statusErr != nil {
-						s.errorLog("srs poller: set live status failed", "err", statusErr, "user_id", userID)
-					}
-					if s.hub != nil {
-						s.hub.NotifyStreamEnded(userID)
-					}
-					s.handleRecording(ctx, stream.ID, s.stopStreamSideEffects(stream.ID))
 					s.infoLog("srs poller: stream ended", "user_id", userID)
 				}
 			}
