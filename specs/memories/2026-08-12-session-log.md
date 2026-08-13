@@ -58,3 +58,15 @@ Feature: VOD processing pipeline debugging (PR #23 branch `feat/browse-vod-disco
 **New learnings for the retro:**
 - Red test commits intentionally fail CI — always push them together with (or after) the green commit so the branch HEAD stays green.
 - Spec conditions like "remove field X until backend implements it" go stale when a parallel feature implements it — when the condition flips, keep the contract and log an Implementation Note instead of blindly following the stale instruction.
+
+## Round 3 — Reference-repo audit → code quality refactor → generic skills
+
+Separate session on branch `refactor/code-quality-and-generic-skills`.
+Full correction/rule trace table lives in the retro:
+[2026-08-12-code-quality-skills-retro.md](./2026-08-12-code-quality-skills-retro.md)
+
+Highlights: ~145 audit findings against Uber Go Style Guide /
+bulletproof-react; mechanical + lifecycle fixes applied across both
+stacks (all green); `go-chi`/`nextjs` skills rewritten generic with the
+new rules; project-specific SRS/River/layout knowledge moved to the new
+`deepcut-platform` skill; generic skills mirrored to `skills-test`.
