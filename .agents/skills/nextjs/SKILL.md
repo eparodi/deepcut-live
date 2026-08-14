@@ -851,4 +851,20 @@ const Mock = (props: Props) => <div>{props.used}</div>;
 Alternatively, configure `argsIgnorePattern: "^_"` in `eslint.config` to
 enable underscore-prefix suppression globally.
 
+### React Compiler — no manual memoization
+
+This project compiles with the React Compiler. The ESLint rule
+`react-hooks/preserve-manual-memoization` FAILS the build when a manual
+`useMemo`/`useCallback` cannot be preserved in the compiled output.
+Compute derived values inline and let the compiler memoize — do not
+hand-roll `useMemo` for derived arrays/objects:
+
+```tsx
+// ❌ Fails react-hooks/preserve-manual-memoization
+const combined = useMemo(() => [...a, ...b], [a, b]);
+
+// ✅ Derived inline; the compiler memoizes
+const combined = [...a, ...b];
+```
+
 *Last updated: 2026-08-12*

@@ -190,4 +190,36 @@ npm test` (Node per `.nvmrc`).
 
 ## Implementation Notes
 
-(Filled in during implementation — deviations go here.)
+Implemented on `feat/ux-ui-enhance` (2026-08-13), all 12 tasks, with
+`tsc --noEmit`, `eslint`, `vitest` (230 tests), and `next build` green
+per task.
+
+- D1: `--color-primary-text` (#B78CFF) and `--color-danger-text`
+  (#F87171) text-safe roles; `--color-google-blue` darkened to #1A5BBF
+  (≈6.4:1 with white); focus ring restored on the chat input.
+- D2: player control bar leaves the a11y tree when hidden (`invisible`,
+  visibility participates in the fade transition) + regression tests.
+- D3: shared `src/lib/useDialogFocus.ts` hook (initial focus, Tab trap,
+  Escape, focus restore, disabled-while-loading) on both dialogs.
+- D4: Search link, flex-wrap, ≥24px nav targets, auth-unknown state
+  (signed-in users never see "Sign in with Google" on transient
+  errors).
+- D5: root `app/loading.tsx` skeleton. D6: GoLivePreview error/retry
+  state — fetch failure no longer renders "Not streaming yet".
+- D7: LiveStreamCard compact list variant (LiveGrid list mode is now a
+  real list).
+- D8: "Retry" label everywhere, h1 on all error pages + sr-only h1 on
+  home, "Server & Stream Key" heading split, error toasts role=alert
+  with ⚠️ icon.
+- D9: optimistic chat echo (sending/failed states + Retry); ChatInput
+  keeps the text when a send fails (onSend now returns success).
+- D10-D12: back-link targets, `md:grid-cols-3`, reduced-motion guards.
+- Deviations: `useDialogFocus` is a new shared hook, not a new
+  dependency (allowed). The player timeline and keyboard-shortcut
+  documentation from the audit's "Top priorities" were NOT built
+  (out of the spec's task list — backlog). `aria-current` nav marking,
+  skip-to-content link, emoji→SVG icon consolidation, and URL-persisted
+  view mode are P2 backlog.
+- React Compiler note: manual `useMemo` on `combinedMessages` was
+  rejected by `react-hooks/preserve-manual-memoization` — dropped the
+  manual memoization (the compiler handles it).

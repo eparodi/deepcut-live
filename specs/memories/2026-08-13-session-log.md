@@ -17,3 +17,15 @@ Feature: Single-thread orchestrator skill (PR #27, branch `feat/orchestrator-ski
 
 - [ ] **AGENTS.md §5.3 claims CI enforces `--max-warnings 0`, but frontend-ci.yml runs plain `npm run lint`.** Either (a) enforce it in CI/eslint config, or (b) correct AGENTS.md. Out of scope for PR #27 — needs a decision.
 - [ ] Run the §9.2 retro after PR #27 merges: trace each correction above to the rule that caught it, and verify ALWAYS-CHECKS items 1–6 are the permanent rules (they were added directly to the orchestrator skill).
+
+---
+
+## Session: UX/UI expert role + UI/UX enhancement (feat/ux-ui-expert-role, feat/ux-ui-enhance)
+
+| # | Symptom | Root Cause | Fix |
+|---|---------|-----------|-----|
+| 1 | eslint `react-hooks/preserve-manual-memoization` rejected a manual `useMemo` in ChatPanel | This repo runs the React Compiler; manual memoization conflicts with its output | Dropped the `useMemo` (compiler memoizes); new rule added to the `nextjs` skill |
+| 2 | ChatPanel WS test fired handlers that never ran | The test stub captured the constructor's inner plain object, but the component assigns `onmessage` on the WebSocket instance | Capture `this` (the instance) in the stub constructor |
+| 3 | "send while CONNECTING" chat test was flaky by design (depended on identity-fetch timing) | Test raced `getMe` resolution before the send | Replaced with a deterministic "send then socket drops" test that exercises the same failed-delivery UI |
+| 4 | Navbar test failed on accessible-name matching (`img alt` + text) | Accessible-name computation differs from naive concatenation | Assert the link by `href` + `within()` the avatar `alt` |
+| 5 | `vi.fn()` as `onSend` returned undefined once the contract became `(message) => boolean` | Signature change without updating default mock semantics | ChatInput keeps text on falsy return; tests now pin both true/false paths |
