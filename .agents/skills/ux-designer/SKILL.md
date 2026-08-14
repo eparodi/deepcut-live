@@ -327,3 +327,9 @@ files, and every finding cites `file:line`. Then:
   hero), live vs VOD states must be visually unambiguous, chat is
   secondary to video, latency-sensitive surfaces need explicit status
   (Doherty: viewers must see why a stream isn't loading).
+- **Agent-generated UI (A2UI):** read `references/a2ui.md` before
+  designing any surface an agent may compose. In short: design the
+  catalog (components + states + tokens), not bespoke screens; states
+  must be data-bound; tokens are the only styling surface; critical
+  flows (auth, stream key, force-end, player, chat send) stay
+  hand-built and out of agent surfaces.
