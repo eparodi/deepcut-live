@@ -1,11 +1,11 @@
 # UI/UX Audit & Enhancement — Frontend (v1)
 
 - **Status:** Draft
-- **Owner:** UX/UI Expert (with Frontend Engineer implementing)
+- **Owner:** UX Designer (with Frontend Engineer implementing)
 - **Created:** 2026-08-13
 - **Authorized by:** user instruction "Review the UI/UX … and generate a spec … orchestrate the changes" (2026-08-13)
 - **Related spec:** `specs/live-streaming-platform.md`, `specs/browse-vod-discovery.md`
-- **Method:** audit of `frontend/src/` against the `ux-ui-expert` skill principles
+- **Method:** audit of `frontend/src/` against the `ux-designer` skill principles
   (NN/g heuristics, Laws of UX, WCAG 2.2 AA, Apple HIG / Material 3 / Carbon /
   Polaris / Atlassian playbooks). Every finding cites `file:line`.
 
