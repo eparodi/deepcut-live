@@ -51,17 +51,13 @@ mobile/
 
 ### `.nvmrc` — pin Node version
 
-Always include a `.nvmrc` file in the mobile root so `nvm use` picks
-the correct Node version automatically:
+> **This repo has no `mobile/` directory yet.** These standards apply
+> only once a mobile workspace is added to deepcut-live.
 
-```
-# mobile/.nvmrc
-24
-```
-
-Use the latest active LTS (24 Krypton as of 2026-08). Expo SDK 52+ targets
-Node 18+, but pinning to LTS avoids surprises with native module
-compatibility.
+When a `mobile/` workspace exists, include a `.nvmrc` in its root so
+`nvm use` picks the correct Node version. Do NOT hardcode a Node
+version here — verify `node --version` against the workspace's
+`.nvmrc` before running `npm` or `node` commands (see AGENTS.md §5.1).
 
 ## Managed Workflow Boundaries
 

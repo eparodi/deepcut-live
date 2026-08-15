@@ -57,25 +57,9 @@ frontend/
 
 ### `.nvmrc` — pin Node version
 
-Always include a `.nvmrc` file in the frontend root so `nvm use` picks
-the correct Node version automatically:
-
-```
-# frontend/.nvmrc
-24
-```
-
-Match the Node version to Next.js requirements. Next.js 16 requires
-`>=20.9.0`. Use the latest active LTS (24 Krypton as of 2026-08).
-
-**The agent shell does not auto-load nvm.** Always verify the active
-Node version matches `.nvmrc` before running `npm` or `node` commands.
-If mismatched, prefix with the nvm path:
-```bash
-node --version  # verify before proceeding
-# If mismatch, use:
-PATH="$HOME/.nvm/versions/node/v$(cat .nvmrc)/bin:$PATH" npm install
-```
+Include a `.nvmrc` in the frontend root. Do not hardcode a Node
+version here — verify `node --version` against the workspace `.nvmrc`
+before running `npm` or `node` commands (see AGENTS.md §5.1).
 
 ## Server Components by DEFAULT
 
