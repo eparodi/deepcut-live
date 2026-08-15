@@ -109,7 +109,8 @@ inline fallbacks (data-URI), never separate screens.
 **Responsive:** grid card = stacked; list row = 128px thumbnail + text.
 
 **Accessibility:** `role=listitem`, aria-label composes name + title +
-viewer count; `img` alt + onError fallback (AGENTS.md 10.3); focus
+viewer count; `img` alt + onError fallback (skills-test AGENTS.md §10:
+`<img>` Error Handling); focus
 ring visible; hover scale is motion-safe.
 
 **Tokens:** surface-raised, danger (LIVE), text, text-muted,
