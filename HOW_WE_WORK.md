@@ -5,21 +5,21 @@
 You run six agent threads simultaneously in Zed, each with a different
 role skill loaded:
 
-| Thread | Skill | Can Write? | Can Terminal? | Model (fast) | Model (heavy) |
+| Thread | Skill | Can Write? | Can Terminal? | Model (default) | Model (heavy) |
 |--------|-------|-----------|--------------|-------------|-------------|
-| PM | `pm` | specs only | ❌ | DeepSeek-V4 | — |
-| Architect | `architect` | specs only | ❌ | DeepSeek-V4 | Claude Opus* |
-| UX Designer | `ux-designer` | specs only | ❌ | DeepSeek-V4 | Claude Opus* |
-| Backend Eng | `backend-engineer` | `backend/` | ✅ | DeepSeek-V4 | Claude Opus* |
-| Frontend Eng | `frontend-engineer` | `frontend/` | ✅ | DeepSeek-V4 | — |
-| Mobile Eng | `mobile-engineer` | `mobile/` | ✅ | DeepSeek-V4 | — |
-| Reviewer | `reviewer` | ❌ | ✅ | DeepSeek-V4 | Claude Opus* |
-| QA | `qa` | ❌ | ✅ | DeepSeek-V4 | — |
-| Security Eng | `security-engineer` | ❌ | ✅ | DeepSeek-V4 | Claude Opus* |
+| PM | `pm` | specs only | ❌ | Flash | Pro |
+| Architect | `architect` | specs only | ❌ | Pro | — |
+| UX Designer | `ux-designer` | specs only | ❌ | Flash | Pro |
+| Backend Eng | `backend-engineer` | `backend/` | ✅ | Flash | Pro |
+| Frontend Eng | `frontend-engineer` | `frontend/` | ✅ | Flash | — |
+| Mobile Eng | `mobile-engineer` | `mobile/` | ✅ | Flash | — |
+| Reviewer | `reviewer` | ❌ | ✅ | Flash | Pro |
+| QA | `qa` | ❌ | ✅ | Flash | — |
+| Security Eng | `security-engineer` | ❌ | ✅ | Pro | — |
 
-*Use stronger model for architecture decisions, complex type design,
-cross-cutting refactors, and security audits. DeepSeek is fine for
-routine implementation.
+Flash = `deepseek-v4-flash`, Pro = `deepseek-v4-pro`. The canonical
+routing policy (task-class table, escalation ladder, handoff template)
+lives in `skills-test/HOW_WE_WORK.md` and skills-test AGENTS.md §10.20.
 
 ---
 
@@ -55,7 +55,7 @@ fix) and is forbidden from asking "Should I...?" — it works until every
 | New feature, requirements/design not yet reviewed by a human | Six-thread `spec-driven` flow (gates matter) |
 | Spec approved, just build it | Orchestrator (one thread) |
 | Bugfix, refactor, or small chore with clear scope | Orchestrator (one thread) |
-| Cross-cutting architecture decisions or security-sensitive work | Six-thread flow + Claude Opus, or at least set `heavy: claude-opus` on the orchestrator profile |
+| Cross-cutting architecture decisions or security-sensitive work | Six-thread flow + Pro, or at least set `heavy` to Pro on the orchestrator profile |
 
 Trade-off: the orchestrator's REVIEWER is the same model that wrote the
 code, so it is a weaker check than a separate reviewer thread. Compensate
@@ -239,17 +239,16 @@ If any role encounters ambiguity in the spec:
 
 ## Model Selection as a Cost Lever
 
-| Task Complexity | Model | Cost |
-|-----------------|-------|------|
-| Routine CRUD, wiring, boilerplate | DeepSeek-V4 | Low |
-| Architecture decisions, type design, complex logic | Claude Opus / GPT-4o | Medium |
-| Spec writing, acceptance criteria | DeepSeek-V4 | Low |
-| UI design, design system work | DeepSeek-V4 / Claude Opus | Low/Medium |
-| Cross-cutting refactors, security audits | Claude Opus | Medium |
+Two DeepSeek tiers: **Flash** (`deepseek-v4-flash`) for routine,
+reversible work; **Pro** (`deepseek-v4-pro`) for judgment-heavy,
+hard-to-reverse work (~3× the price). The canonical task-class routing
+table, escalation ladder, and handoff template live in
+`skills-test/HOW_WE_WORK.md` (policy also pinned in skills-test
+AGENTS.md §10.20). Cost measurement: the 7-day pilot tracker at
+`skills-test/specs/pilot/agent-cost-pilot.md`.
 
-Rule of thumb: use DeepSeek for 80% of work. Escalate to a stronger
-model when DeepSeek gets stuck, hallucinates, or when the decision is
-hard to reverse.
+Rule of thumb: Flash for ~80% of work; escalate to Pro when Flash gets
+stuck, hallucinates, or the decision is hard to reverse.
 
 ---
 
