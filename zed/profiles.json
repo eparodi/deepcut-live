@@ -14,9 +14,9 @@
         "fetch": false
       },
       "model": {
-        "default": "deepseek",
-        "heavy": "",
-        "reasoning": "PM role is planning-only: needs read/grep to understand context, write to produce specs. Terminal and fetch are disabled since PM never runs code."
+        "default": "deepseek-v4-flash",
+        "heavy": "deepseek-v4-pro",
+        "reasoning": "PM role is planning-only: needs read/grep to understand context, write to produce specs. Terminal and fetch are disabled since PM never runs code. Flash for drafting; escalate to Pro for requirement conflicts."
       }
     },
     "architect": {
@@ -33,9 +33,9 @@
         "fetch": false
       },
       "model": {
-        "default": "deepseek",
-        "heavy": "claude-opus",
-        "reasoning": "Architect designs API contracts, data models, and system architecture. Terminal disabled — produces design artifacts only. Use Claude Opus for complex architecture decisions."
+        "default": "deepseek-v4-pro",
+        "heavy": "",
+        "reasoning": "Architect designs API contracts, data models, and system architecture. Terminal disabled — produces design artifacts only. Pro by default: contracts gate everything downstream and are hard to reverse."
       }
     },
     "ux-designer": {
@@ -52,9 +52,9 @@
         "fetch": false
       },
       "model": {
-        "default": "deepseek",
-        "heavy": "claude-opus",
-        "reasoning": "UX Designer produces UI design artifacts: components, states, tokens, accessibility. Terminal disabled — never writes implementation code."
+        "default": "deepseek-v4-flash",
+        "heavy": "deepseek-v4-pro",
+        "reasoning": "UX Designer produces UI design artifacts: components, states, tokens, accessibility. Terminal disabled — never writes implementation code. Flash for iterating artifacts; escalate to Pro for system-level design work."
       }
     },
     "backend-engineer": {
@@ -71,9 +71,9 @@
         "fetch": false
       },
       "model": {
-        "default": "deepseek",
-        "heavy": "claude-opus",
-        "reasoning": "Full read/write/terminal for Go development. Use Claude Opus for complex type design, architecture changes, and when DeepSeek hallucinates Go APIs."
+        "default": "deepseek-v4-flash",
+        "heavy": "deepseek-v4-pro",
+        "reasoning": "Full read/write/terminal for Go development. Flash for spec'd implementation with TDD; escalate to Pro for complex type design, architecture changes, and when Flash hallucinates Go APIs."
       },
       "write_scope": {
         "include": ["backend/", "specs/"],
@@ -94,9 +94,9 @@
         "fetch": false
       },
       "model": {
-        "default": "deepseek",
+        "default": "deepseek-v4-flash",
         "heavy": "",
-        "reasoning": "Full read/write/terminal for Next.js development. DeepSeek is usually sufficient for Next.js work."
+        "reasoning": "Full read/write/terminal for Next.js development. Flash is usually sufficient for Next.js work."
       },
       "write_scope": {
         "include": ["frontend/", "specs/"],
@@ -117,7 +117,7 @@
         "fetch": false
       },
       "model": {
-        "default": "deepseek",
+        "default": "deepseek-v4-flash",
         "heavy": "",
         "reasoning": "Full read/write/terminal for Expo/React Native development."
       },
@@ -140,12 +140,12 @@
         "fetch": false
       },
       "model": {
-        "default": "deepseek",
-        "heavy": "claude-opus",
-        "reasoning": "One agent simulates PLANNER/CODER/REVIEWER/DEBUGGER and loops until PLAN.md is fully checked off. Full read/write/terminal — needs to work across backend/ and frontend/ with no write scope restrictions. Escalate to Claude Opus if the loop stalls on a hard-to-reverse design decision."
+        "default": "deepseek-v4-flash",
+        "heavy": "deepseek-v4-pro",
+        "reasoning": "One agent simulates PLANNER/CODER/REVIEWER/DEBUGGER and loops until PLAN.md is fully checked off. Full read/write/terminal — needs to work across backend/ and frontend/ with no write scope restrictions. Escalate to Pro if the loop stalls on a hard-to-reverse design decision."
       }
     }
   },
-  "version": "1.2.0",
-  "last_updated": "2026-08-13"
+  "version": "1.4.0",
+  "last_updated": "2026-08-15"
 }
