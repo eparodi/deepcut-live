@@ -11,6 +11,7 @@ role skill loaded:
 | Architect | `architect` | specs only | ❌ | Pro | — |
 | UX Designer | `ux-designer` | specs only | ❌ | Flash | Pro |
 | Backend Eng | `backend-engineer` | `backend/` | ✅ | Flash | Pro |
+| DB Analyst | `db-analyst` | `backend/db` + stores | ✅ | Pro | — |
 | Frontend Eng | `frontend-engineer` | `frontend/` | ✅ | Flash | — |
 | Mobile Eng | `mobile-engineer` | `mobile/` | ✅ | Flash | — |
 | Reviewer | `reviewer` | ❌ | ✅ | Flash | Pro |

@@ -144,8 +144,130 @@
         "heavy": "deepseek-v4-pro",
         "reasoning": "One agent simulates PLANNER/CODER/REVIEWER/DEBUGGER and loops until PLAN.md is fully checked off. Full read/write/terminal — needs to work across backend/ and frontend/ with no write scope restrictions. Escalate to Pro if the loop stalls on a hard-to-reverse design decision."
       }
+    },
+    "ai-engineer": {
+      "display_name": "AI Engineer (Senior)",
+      "skills": ["ai-engineer", "spec-driven"],
+      "tools": {
+        "read_file": true,
+        "grep": true,
+        "find_path": true,
+        "list_directory": true,
+        "write_file": true,
+        "edit_file": true,
+        "terminal": true,
+        "fetch": true
+      },
+      "model": {
+        "default": "deepseek-v4-flash",
+        "heavy": "deepseek-v4-pro",
+        "reasoning": "Implements the LLM layer: provider client, malformed-response ladder, retries/breaker, token telemetry, cost-budget mechanism. Fetch enabled because verifying provider docs and capturing real payloads is core to the role. Escalate to Pro for provider-API surprises."
+      },
+      "write_scope": {
+        "include": ["backend/", "specs/"],
+        "exclude": ["frontend/", "mobile/"]
+      }
+    },
+    "financial-analyst": {
+      "display_name": "Financial Analyst (Senior)",
+      "skills": ["financial-analyst"],
+      "tools": {
+        "read_file": true,
+        "grep": true,
+        "find_path": true,
+        "list_directory": true,
+        "write_file": true,
+        "edit_file": true,
+        "terminal": false,
+        "fetch": true
+      },
+      "model": {
+        "default": "deepseek-v4-pro",
+        "heavy": "",
+        "reasoning": "Owns money semantics for any trading features: risk rules, sizing, capital. Never writes implementation code. Pro by default: risk rules are hard to reverse. Fetch enabled for serious-source verification."
+      }
+    },
+    "reviewer": {
+      "display_name": "Code Reviewer (Senior)",
+      "skills": ["reviewer"],
+      "tools": {
+        "read_file": true,
+        "grep": true,
+        "find_path": true,
+        "list_directory": true,
+        "write_file": false,
+        "edit_file": false,
+        "terminal": true,
+        "fetch": false
+      },
+      "model": {
+        "default": "deepseek-v4-flash",
+        "heavy": "deepseek-v4-pro",
+        "reasoning": "Read-only code review: needs grep/read to inspect, terminal to run build/tests. Never writes code. Flash for review reports; escalate to Pro for subtle correctness issues."
+      }
+    },
+    "qa": {
+      "display_name": "QA Engineer (Senior)",
+      "skills": ["qa"],
+      "tools": {
+        "read_file": true,
+        "grep": true,
+        "find_path": true,
+        "list_directory": true,
+        "write_file": false,
+        "edit_file": false,
+        "terminal": true,
+        "fetch": false
+      },
+      "model": {
+        "default": "deepseek-v4-flash",
+        "heavy": "",
+        "reasoning": "QA runs test suites and verifies spec contracts. Terminal enabled for build/test commands; no writes."
+      }
+    },
+    "security-engineer": {
+      "display_name": "Security Engineer (Senior)",
+      "skills": ["security-engineer"],
+      "tools": {
+        "read_file": true,
+        "grep": true,
+        "find_path": true,
+        "list_directory": true,
+        "write_file": false,
+        "edit_file": false,
+        "terminal": true,
+        "fetch": false
+      },
+      "model": {
+        "default": "deepseek-v4-pro",
+        "heavy": "",
+        "reasoning": "Security audits and local penetration testing. Terminal enabled for scanners and static analysis; no writes. Pro by default: audits are judgment-heavy and hard to reverse."
+      }
+    },
+    "db-analyst": {
+      "display_name": "DB Analyst (Senior)",
+      "skills": ["db-analyst", "go-chi"],
+      "tools": {
+        "read_file": true,
+        "grep": true,
+        "find_path": true,
+        "list_directory": true,
+        "write_file": true,
+        "edit_file": true,
+        "terminal": true,
+        "fetch": false
+      },
+      "model": {
+        "default": "deepseek-v4-pro",
+        "heavy": "",
+        "reasoning": "Owns Postgres migration mechanics, the store/query layer, data integrity, and test-DB strategy for this backend. Reviews the Architect's data model for mechanical safety, never designs tables. Pro by default: migrations are hard to reverse."
+      },
+      "write_scope": {
+        "include": ["backend/", "specs/"],
+        "exclude": ["frontend/", "mobile/"]
+      }
     }
   },
-  "version": "1.4.0",
+  "version": "1.5.0",
   "last_updated": "2026-08-15"
 }
