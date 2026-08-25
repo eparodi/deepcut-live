@@ -1,6 +1,6 @@
 ---
 name: orchestrator
-description: Single-thread Master Orchestrator — simulates a 4-role team (PLANNER/CODER/REVIEWER/DEBUGGER) in one agent thread and loops until PLAN.md is fully checked off. Load for autonomous end-to-end feature implementation or bugfixing in the deepcut-live monorepo when you want one agent to plan, code, test, and self-debug without human checkpoints.
+description: Single-thread Master Orchestrator — simulates a 4-role team (PLANNER/CODER/REVIEWER/DEBUGGER) in one agent thread and loops until PLAN.md is fully checked off. Load for autonomous end-to-end feature implementation or bugfixing when you want one agent to plan, code, test, and self-debug without human checkpoints.
 ---
 
 # Master Orchestrator — Single-Thread Build Loop
@@ -19,64 +19,41 @@ gate on requirements or design — that is what `spec-driven` is for.
 
 ---
 
-## CONTEXT INJECTION — VERIFIED PROJECT FACTS
+## PHASE 0 — CONTEXT DISCOVERY (PLANNER runs this FIRST, every session)
 
-> Verified 2026-08-13. If any fact is stale (deps changed, new dirs),
-> update this section instead of guessing, then proceed.
+Never assume anything about the host repo. Before writing `PLAN.md`,
+discover and record:
 
-### Repo layout (monorepo root: `deepcut-live/`)
+1. **Stack** — read `package.json`, `go.mod`, `pyproject.toml`,
+   `Cargo.toml`, `Gemfile`, `requirements.txt`, or equivalent. Note the
+   language, framework, test library, and pinned versions.
+2. **Layout** — list the repo root; find source dirs (`src/`, `app/`,
+   `backend/`, `frontend/`), test dirs, and config files.
+3. **Entrypoints** — the main file (`main.go`, `app.py`, `index.tsx`) and
+   the primary route registrations.
+4. **Test/build/lint commands** — read `Makefile`, `package.json`
+   scripts, `.github/workflows/`, or equivalent. Prefer the repo's OWN
+   commands — never invent variants (if the Makefile says
+   `test-integration`, use that).
+5. **Specs** — check `specs/` for an existing spec covering the goal. If
+   the goal is a non-trivial feature with no spec, PLANNER drafts one in
+   `specs/` first (follow `spec-driven` conventions), then derives
+   PLAN.md from it.
 
-- `backend/`      — Go 1.25.0 API server + worker (chi v5, pgx/v5 Postgres,
-                    River v0.43 job queue, JWT ECDSA P-256, nhooyr websockets,
-                    testcontainers-go for integration tests)
-- `frontend/`     — Next.js 16.3.0 (App Router) + React 19.2.8 + TypeScript 5
-                    + Tailwind 4 + Vitest 4 + Testing Library + ESLint 9.
-                    Node version pinned: 24.19.0 (`frontend/.nvmrc`)
-- `specs/`        — Single source of truth. Feature specs live here.
-- `data/`         — Docker volume mounts (HLS, recordings) — never edit.
-- `docker-compose.yml` — backend, worker, postgres:16-alpine, ossrs/srs:5
-- NOTE: there is NO `mobile/` directory. Do not create one unless a task
-        explicitly requires it.
+Record the result as a Context block at the top of `PLAN.md` so every
+role reads the same facts:
 
-### Main entrypoints
+```
+## Context (discovered <date>)
+- Stack: <language> + <framework> (<versions>)
+- Test command: <cmd>
+- Build/lint: <cmd>
+- Entrypoint: <path>
+- Spec: specs/<slug>.md (or none)
+```
 
-- Backend server: `backend/cmd/server/main.go` (HTTP on port 8081)
-- Backend worker: `backend/cmd/worker/` (River VOD/ffmpeg jobs)
-- Frontend routes: `frontend/src/app/{page,channel,dashboard,search,vods}/`
-- Backend modules (hexagonal): `backend/internal/modules/{auth,streams,vods,chat}/`
-  each with `adapter/{http,postgres,river}/`, `application/`, `domain/`.
-
-### EXACT verification commands (use these, not your own variants)
-
-- Backend build:   `cd backend && go build ./...`
-- Backend vet:     `cd backend && go vet ./...`
-- Backend unit tests (no DB):  `cd backend && go test -short -count=1 ./...`
-- Backend integration tests (needs running Postgres; use docker compose):
-                   `cd backend && go test -run Integration -count=1 -p 1 ./...`
-- Frontend typecheck: `cd frontend && npx tsc --noEmit`
-- Frontend tests:  `cd frontend && npm test`   (= `vitest run`)
-- Frontend lint:   `cd frontend && npm run lint`  (plain `eslint`, config: `frontend/eslint.config.mjs`)
-- Frontend build:  `cd frontend && npm run build`
-- Before ANY npm/npx command: verify `node --version` matches
-  `frontend/.nvmrc` (24.19.0). On mismatch, prefix the command with
-  `PATH="$HOME/.nvm/versions/node/v$(cat frontend/.nvmrc)/bin:$PATH"`.
-
-### Governing rules (already in repo — follow them)
-
-- Read `AGENTS.md` at repo root: hallucination prevention (cite real APIs,
-  verify against `frontend/src/types/index.ts` contracts), build after every
-  change, table-driven backend tests.
-- Load stack skills before writing code in each stack: `@go-chi` for Go,
-  `@nextjs` for TSX. The `backend-engineer` / `frontend-engineer` skills add
-  role-level guardrails.
-- Specs in `specs/` are the contract. Read the relevant spec BEFORE
-  implementing anything. If the goal is a non-trivial feature with no spec,
-  PLANNER drafts one in `specs/` first (follow `spec-driven` conventions),
-  then derives PLAN.md from it.
-- Git (per AGENTS.md §6): PLANNER starts work on a branch cut from latest
-  `main` (`feat/`, `fix/`, `chore/`, `refactor/` prefix, kebab-case), pushes
-  early so CI runs, and commits per completed subtask with Conventional
-  Commits. NEVER commit to `main` or a protected branch.
+Then load the matching stack skill if one exists in `.agents/skills/`
+(`go-chi`, `nextjs`, `expo`, ...) before CODER writes code in that stack.
 
 ---
 
@@ -86,7 +63,7 @@ You switch hats internally. Prefix your visible work with the role tag in
 square brackets.
 
 **[PLANNER]**
-- Reads the goal, the relevant specs in `specs/`, and existing code.
+- Runs Phase 0 discovery, then reads the relevant spec and existing code.
 - Decomposes the goal into small, sequential, independently verifiable
   subtasks ordered so the build never stays broken for more than one
   subtask (backend contracts before frontend consumption).
@@ -98,25 +75,22 @@ square brackets.
 **[CODER]**
 - Implements exactly ONE unchecked subtask per iteration using file edits.
 - Follows existing patterns (naming, layering, error wrapping, response
-  shapes matching `frontend/src/types/index.ts` exactly). No new
+  shapes matching the frontend's type contract exactly). No new
   dependencies without justification. No stubs masquerading as "done".
 - Never changes files outside the subtask's declared scope. If a required
   change falls outside scope, stop and hand back to [PLANNER] to re-plan.
 
 **[REVIEWER]**
 - Runs the verification command(s) declared in the subtask's PLAN.md line,
-  plus the relevant build/lint/typecheck:
-    - backend touched  → `cd backend && go build ./... && go vet ./... && go test -short -count=1 ./...`
-    - frontend touched → verify Node matches `.nvmrc` first, then
-      `cd frontend && npx tsc --noEmit && npm run lint && npm test`
-    - integration-only changes → also `go test -run Integration -count=1 -p 1 ./...`
+  plus the repo's build/lint/typecheck commands from the Context block
+  (PLANNER discovered them in Phase 0 — REVIEWER never invents commands).
 - Also runs the ALWAYS-CHECKS list (next section) on every iteration.
 - Verdicts are binary: PASS or FAIL (with the exact error output).
 
 **[DEBUGGER]**
 - Takes REVIEWER's failing output and root-causes it: read the actual error,
-  the actual installed library version (check `go.mod`, `package.json`, or
-  module cache — never trust memory of APIs), and the surrounding code.
+  the actual installed library version (check the lockfiles / dependency
+  manifests — never trust memory of APIs), and the surrounding code.
 - Rewrites only the code responsible. Never "fixes" a test by deleting or
   weakening it. Never discards meaningful code to silence diagnostics.
 - After a fix, control returns to [REVIEWER].
@@ -125,29 +99,26 @@ square brackets.
 
 ## REVIEWER ALWAYS-CHECKS (permanent rules — check AND apply every iteration)
 
-Derived from the PR #27 review. REVIEWER enforces these on EVERY
+Derived from a cross-repo PR review. REVIEWER enforces these on EVERY
 iteration, in addition to the build/test/lint commands. When a check
 fails, the current role fixes it immediately — checks are not optional.
 
 1. **Facts stay verified.** Never state CI/config behavior in PLAN.md,
-   LOOP_LOG.md, or the code unless you have read it in
-   `.github/workflows/` or the actual config file during this run
-   (e.g., do NOT claim `--max-warnings 0` — frontend CI runs plain
-   `npm run lint`).
+   LOOP_LOG.md, or the code unless you have read it in the repo's
+   `.github/workflows/`, Makefile, or config files during this run.
+   Claims like "CI enforces X" require reading CI — not memory.
 2. **Docs edits stay consistent.** If you touch `README.md` /
    `HOW_WE_WORK.md`, keep diagrams aligned, tables accurate, and claims
    matching real CI/config behavior.
 3. **Gitignore anchoring.** New working-doc patterns must be anchored to
    the repo root (`/PLAN.md`), never bare names — bare patterns match at
    any depth and silently ignore same-named files elsewhere.
-4. **Node version guard.** Verify `node --version` matches
-   `frontend/.nvmrc` before every npm/npx command.
-5. **Business-rule ambiguity.** Never resolved with an assumption —
-   stop-and-ask is mandatory (AGENTS.md §3.1).
-6. **Session log current.** After every correction, append to
-   `specs/memories/<YYYY-MM-DD>-session-log.md` (AGENTS.md §9.1); at
-   session end, run the retro (§9.2) and fold missing rules back into
-   this skill or AGENTS.md.
+4. **Business-rule ambiguity.** Never resolved with an assumption —
+   stop-and-ask is mandatory (AGENTS.md §3.1 if present).
+5. **Session log current.** After every correction, append to
+   `specs/memories/<YYYY-MM-DD>-session-log.md` (AGENTS.md §9.1 if
+   present); at session end, run the §9.2 retro and fold missing rules
+   back into this skill or AGENTS.md.
 
 ---
 
@@ -158,7 +129,8 @@ LOOP:
 
 1. PLANNER  — read PLAN.md; pick the first unchecked subtask that is
               unblocked. If none are unblocked, re-plan to unblock.
-              If PLAN.md does not exist yet, create it (initial plan).
+              If PLAN.md does not exist yet, run Phase 0 discovery and
+              create it (Context block + initial plan).
 2. CODER    — implement that subtask using file edits. State briefly
               which files changed and why.
 3. REVIEWER — run the subtask's declared test/build commands.
@@ -183,11 +155,11 @@ LOOP:
 - Errors are your problem, not the user's: retry, root-cause, re-plan.
   Asking the user for help is the LAST resort, after genuine blockage —
   EXCEPT for business-rule ambiguity, where stop-and-ask is MANDATORY
-  (see below; AGENTS.md §3.1 overrides this section).
-- Handle missing environment gracefully: if Docker/Postgres is required
-  for integration tests and unavailable, start it via
-  `docker compose up -d postgres` if permitted; if not possible, fall back
-  to unit tests and note the gap in LOOP_LOG.md.
+  (see below; AGENTS.md §3.1 overrides this section when present).
+- Handle missing environment gracefully: if a database/container is
+  required for integration tests and unavailable, start it via the
+  repo's compose/script if permitted; if not possible, fall back to unit
+  tests and note the gap in LOOP_LOG.md.
 - Do NOT guess business rules (AGENTS.md §3.1 — this is the ONE mandatory
   exception to the no-questions rule). If the spec is silent on a decision
   that changes behavior (pricing, permissions, status codes) and no
@@ -197,13 +169,18 @@ LOOP:
   `[Assumption]` tag, and proceed.
 - Never hardcode secrets. Use env vars with dev defaults (and log a
   `slog.Warn` for dev-default secrets in Go).
+- Git: PLANNER starts work on a branch cut from latest `main`
+  (`feat/`, `fix/`, `chore/`, `refactor/` prefix, kebab-case), pushes
+  early so CI runs, and commits per completed subtask with Conventional
+  Commits. NEVER commit to `main` or a protected branch.
 
 ---
 
 ## PROGRESS TRACKING (mandatory files)
 
 1. `PLAN.md` (repo root)
-   - Checkbox subtask list. Each line: files touched + verification command.
+   - Phase 0 Context block + checkbox subtask list. Each line: files
+     touched + verification command.
    - Keep it updated every iteration (check off `[X]` on pass, re-plan on
      blockage). This file is your working memory.
 
@@ -222,21 +199,21 @@ LOOP:
      different root-cause theory.
 
 3. `specs/memories/<YYYY-MM-DD>-session-log.md`
-   - AGENTS.md §9.1: every session with corrections/bug fixes logs them
-     here (correction → root cause → fix). Update after EVERY correction,
-     not just at the end. At session end, run the §9.2 retro and update
-     this skill or AGENTS.md with any missing rule.
+   - AGENTS.md §9.1 (when present): every session with corrections/bug
+     fixes logs them here (correction → root cause → fix). Update after
+     EVERY correction, not just at the end. At session end, run the
+     §9.2 retro and update this skill or AGENTS.md with any missing rule.
 
 ---
 
 ## DEFINITION OF DONE
 
 - Every PLAN.md line is `[X]`.
-- Backend build + vet + unit tests pass; frontend typecheck + lint + tests
-  pass; any integration test claimed as run actually ran.
+- The repo's build + lint + unit tests pass; any integration test claimed
+  as run actually ran.
 - LOOP_LOG.md contains a complete trace of every iteration.
 - `specs/memories/<YYYY-MM-DD>-session-log.md` is up to date with every
-  correction (AGENTS.md §9.1).
+  correction (AGENTS.md §9.1 when present).
 - Final message to the user: a concise summary of what was implemented,
   files changed, validation run (with real results), and any
   `[Assumption]`s or follow-ups — no "Should I...?" questions.
@@ -246,5 +223,5 @@ LOOP:
 ## THE GOAL
 
 Execute the user's goal from the thread message using this loop. Begin
-immediately: read the relevant spec (if any), create PLAN.md, and start
+immediately: run Phase 0 discovery, create PLAN.md, and start
 Iteration 1.
